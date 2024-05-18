@@ -1,0 +1,59 @@
+{
+  "values": [
+    {
+      "type": "diffstat",
+      "lines_added": 2,
+      "lines_removed": 2,
+      "status": "modified",
+      "old": {
+        "path": "Containerfile",
+        "type": "commit_file",
+        "escaped_path": "Containerfile",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/src/24d9346b4d6d780cef4fe4808cc816bdc70d6189/Containerfile"
+          }
+        }
+      },
+      "new": {
+        "path": "Containerfile",
+        "type": "commit_file",
+        "escaped_path": "Containerfile",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/src/f2cd33501ec262030d1ee680fcc216d0c5238d82/Containerfile"
+          }
+        }
+      }
+    },
+    {
+      "type": "diffstat",
+      "lines_added": 2,
+      "lines_removed": 0,
+      "status": "modified",
+      "old": {
+        "path": "README.md",
+        "type": "commit_file",
+        "escaped_path": "README.md",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/src/24d9346b4d6d780cef4fe4808cc816bdc70d6189/README.md"
+          }
+        }
+      },
+      "new": {
+        "path": "README.md",
+        "type": "commit_file",
+        "escaped_path": "README.md",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/src/f2cd33501ec262030d1ee680fcc216d0c5238d82/README.md"
+          }
+        }
+      }
+    }
+  ],
+  "pagelen": 500,
+  "size": 2,
+  "page": 1
+}

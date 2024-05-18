@@ -1,0 +1,328 @@
+{
+  "repository": {
+    "type": "repository",
+    "full_name": "firmapro/releases-poc",
+    "links": {
+      "self": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc"
+      },
+      "html": {
+        "href": "https://bitbucket.org/firmapro/releases-poc"
+      },
+      "avatar": {
+        "href": "https://bytebucket.org/ravatar/%7Bd848d9c6-e57f-404c-a9ea-512dd045a277%7D?ts=default"
+      }
+    },
+    "name": "releases-poc",
+    "scm": "git",
+    "website": null,
+    "owner": {
+      "display_name": "Firmaprofesional SA",
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/workspaces/%7B58ca886c-381d-4e33-916e-d8f25dd3ebc1%7D"
+        },
+        "avatar": {
+          "href": "https://bitbucket.org/account/firmapro/avatar/"
+        },
+        "html": {
+          "href": "https://bitbucket.org/%7B58ca886c-381d-4e33-916e-d8f25dd3ebc1%7D/"
+        }
+      },
+      "type": "team",
+      "uuid": "{58ca886c-381d-4e33-916e-d8f25dd3ebc1}",
+      "username": "firmapro"
+    },
+    "workspace": {
+      "type": "workspace",
+      "uuid": "{58ca886c-381d-4e33-916e-d8f25dd3ebc1}",
+      "name": "Firmaprofesional SA",
+      "slug": "firmapro",
+      "links": {
+        "avatar": {
+          "href": "https://bitbucket.org/workspaces/firmapro/avatar/?ts=1705405545"
+        },
+        "html": {
+          "href": "https://bitbucket.org/firmapro/"
+        },
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/workspaces/firmapro"
+        }
+      }
+    },
+    "is_private": true,
+    "project": {
+      "type": "project",
+      "key": "PROD",
+      "uuid": "{5d36641f-cdf1-4bc1-b369-cd87280d6586}",
+      "name": "PRODUCTION",
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/workspaces/firmapro/projects/PROD"
+        },
+        "html": {
+          "href": "https://bitbucket.org/firmapro/workspace/projects/PROD"
+        },
+        "avatar": {
+          "href": "https://bitbucket.org/account/user/firmapro/projects/PROD/avatar/32?ts=1688384906"
+        }
+      }
+    },
+    "uuid": "{d848d9c6-e57f-404c-a9ea-512dd045a277}",
+    "parent": null
+  },
+  "actor": {
+    "display_name": "Miguel Lopez Ruiz",
+    "links": {
+      "self": {
+        "href": "https://api.bitbucket.org/2.0/users/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D"
+      },
+      "avatar": {
+        "href": "https://secure.gravatar.com/avatar/064779712153598106047287272db371?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FMR-4.png"
+      },
+      "html": {
+        "href": "https://bitbucket.org/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D/"
+      }
+    },
+    "type": "user",
+    "uuid": "{981c5124-f0f0-4b95-b543-82a33d53aabc}",
+    "account_id": "632c300b2eaaa5dcfa127810",
+    "nickname": "Miguel López Ruiz"
+  },
+  "pullrequest": {
+    "comment_count": 2,
+    "task_count": 2,
+    "type": "pullrequest",
+    "id": 5,
+    "title": "[SCHEMA] [NOTARY] 1.0.1.1.oracle",
+    "description": "",
+    "rendered": {
+      "title": {
+        "type": "rendered",
+        "raw": "[SCHEMA] [NOTARY] 1.0.1.1.oracle",
+        "markup": "markdown",
+        "html": "<p>[SCHEMA] [NOTARY] 1.0.1.1.oracle</p>"
+      },
+      "description": {
+        "type": "rendered",
+        "raw": "",
+        "markup": "markdown",
+        "html": ""
+      }
+    },
+    "state": "OPEN",
+    "merge_commit": null,
+    "close_source_branch": false,
+    "closed_by": null,
+    "author": {
+      "type": "app_user",
+      "links": {
+        "avatar": {
+          "href": "https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/712020:4ba4c72e-79f5-4a70-8d97-8ed134bfc666/cc10622e-67f1-4c2a-8471-b5a94954d214/128"
+        }
+      },
+      "created_on": "2024-04-16T12:03:56.314998+00:00",
+      "display_name": "BotCI",
+      "uuid": "{0686192f-efae-4fc4-9e83-f266d6ff234f}",
+      "account_id": "712020:4ba4c72e-79f5-4a70-8d97-8ed134bfc666",
+      "account_status": "active",
+      "kind": "repository_access_token"
+    },
+    "reason": "",
+    "created_on": "2024-04-16T12:41:50.944448+00:00",
+    "updated_on": "2024-04-29T12:49:03.952294+00:00",
+    "destination": {
+      "branch": {
+        "name": "main"
+      },
+      "commit": {
+        "hash": "24d9346b4d6d",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/commit/24d9346b4d6d"
+          },
+          "html": {
+            "href": "https://bitbucket.org/firmapro/releases-poc/commits/24d9346b4d6d"
+          }
+        },
+        "type": "commit"
+      },
+      "repository": {
+        "type": "repository",
+        "full_name": "firmapro/releases-poc",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc"
+          },
+          "html": {
+            "href": "https://bitbucket.org/firmapro/releases-poc"
+          },
+          "avatar": {
+            "href": "https://bytebucket.org/ravatar/%7Bd848d9c6-e57f-404c-a9ea-512dd045a277%7D?ts=default"
+          }
+        },
+        "name": "releases-poc",
+        "uuid": "{d848d9c6-e57f-404c-a9ea-512dd045a277}"
+      }
+    },
+    "source": {
+      "branch": {
+        "name": "notary-1.0.1.1-oracle"
+      },
+      "commit": {
+        "hash": "63e4be4fd9ec",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/commit/63e4be4fd9ec"
+          },
+          "html": {
+            "href": "https://bitbucket.org/firmapro/releases-poc/commits/63e4be4fd9ec"
+          }
+        },
+        "type": "commit"
+      },
+      "repository": {
+        "type": "repository",
+        "full_name": "firmapro/releases-poc",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc"
+          },
+          "html": {
+            "href": "https://bitbucket.org/firmapro/releases-poc"
+          },
+          "avatar": {
+            "href": "https://bytebucket.org/ravatar/%7Bd848d9c6-e57f-404c-a9ea-512dd045a277%7D?ts=default"
+          }
+        },
+        "name": "releases-poc",
+        "uuid": "{d848d9c6-e57f-404c-a9ea-512dd045a277}"
+      }
+    },
+    "reviewers": [],
+    "participants": [
+      {
+        "type": "participant",
+        "user": {
+          "display_name": "Miguel Lopez Ruiz",
+          "links": {
+            "self": {
+              "href": "https://api.bitbucket.org/2.0/users/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D"
+            },
+            "avatar": {
+              "href": "https://secure.gravatar.com/avatar/064779712153598106047287272db371?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FMR-4.png"
+            },
+            "html": {
+              "href": "https://bitbucket.org/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D/"
+            }
+          },
+          "type": "user",
+          "uuid": "{981c5124-f0f0-4b95-b543-82a33d53aabc}",
+          "account_id": "632c300b2eaaa5dcfa127810",
+          "nickname": "Miguel López Ruiz"
+        },
+        "role": "PARTICIPANT",
+        "approved": false,
+        "state": null,
+        "participated_on": "2024-04-29T12:49:03.952294+00:00"
+      }
+    ],
+    "links": {
+      "self": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5"
+      },
+      "html": {
+        "href": "https://bitbucket.org/firmapro/releases-poc/pull-requests/5"
+      },
+      "commits": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/commits"
+      },
+      "approve": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/approve"
+      },
+      "request-changes": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/request-changes"
+      },
+      "diff": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/diff/firmapro/releases-poc:63e4be4fd9ec%0D24d9346b4d6d?from_pullrequest_id=5&topic=true"
+      },
+      "diffstat": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/diffstat/firmapro/releases-poc:63e4be4fd9ec%0D24d9346b4d6d?from_pullrequest_id=5&topic=true"
+      },
+      "comments": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/comments"
+      },
+      "activity": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/activity"
+      },
+      "merge": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/merge"
+      },
+      "decline": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/decline"
+      },
+      "statuses": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/statuses"
+      }
+    },
+    "summary": {
+      "type": "rendered",
+      "raw": "",
+      "markup": "markdown",
+      "html": ""
+    }
+  },
+  "comment": {
+    "id": 496660882,
+    "created_on": "2024-04-29T12:49:03.952207+00:00",
+    "updated_on": "2024-04-29T12:49:03.952294+00:00",
+    "content": {
+      "type": "rendered",
+      "raw": "sdfsdfs \n #argo unlock",
+      "markup": "markdown",
+      "html": "<p>/argocd test</p>"
+    },
+    "user": {
+      "display_name": "Miguel Lopez Ruiz",
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/users/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D"
+        },
+        "avatar": {
+          "href": "https://secure.gravatar.com/avatar/064779712153598106047287272db371?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FMR-4.png"
+        },
+        "html": {
+          "href": "https://bitbucket.org/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D/"
+        }
+      },
+      "type": "user",
+      "uuid": "{981c5124-f0f0-4b95-b543-82a33d53aabc}",
+      "account_id": "632c300b2eaaa5dcfa127810",
+      "nickname": "Miguel López Ruiz"
+    },
+    "deleted": false,
+    "pending": false,
+    "type": "pullrequest_comment",
+    "links": {
+      "self": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5/comments/496660882"
+      },
+      "html": {
+        "href": "https://bitbucket.org/firmapro/releases-poc/pull-requests/5/_/diff#comment-496660882"
+      }
+    },
+    "pullrequest": {
+      "type": "pullrequest",
+      "id": 5,
+      "title": "[SCHEMA] [NOTARY] 1.0.1.1.oracle",
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/5"
+        },
+        "html": {
+          "href": "https://bitbucket.org/firmapro/releases-poc/pull-requests/5"
+        }
+      }
+    }
+  }
+}

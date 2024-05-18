@@ -1,0 +1,253 @@
+{
+  "repository": {
+    "type": "repository",
+    "full_name": "firmapro/releases-poc",
+    "links": {
+      "self": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc"
+      },
+      "html": {
+        "href": "https://bitbucket.org/firmapro/releases-poc"
+      },
+      "avatar": {
+        "href": "https://bytebucket.org/ravatar/%7Bd848d9c6-e57f-404c-a9ea-512dd045a277%7D?ts=default"
+      }
+    },
+    "name": "releases-poc",
+    "scm": "git",
+    "website": null,
+    "owner": {
+      "display_name": "Firmaprofesional SA",
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/workspaces/%7B58ca886c-381d-4e33-916e-d8f25dd3ebc1%7D"
+        },
+        "avatar": {
+          "href": "https://bitbucket.org/account/firmapro/avatar/"
+        },
+        "html": {
+          "href": "https://bitbucket.org/%7B58ca886c-381d-4e33-916e-d8f25dd3ebc1%7D/"
+        }
+      },
+      "type": "team",
+      "uuid": "{58ca886c-381d-4e33-916e-d8f25dd3ebc1}",
+      "username": "firmapro"
+    },
+    "workspace": {
+      "type": "workspace",
+      "uuid": "{58ca886c-381d-4e33-916e-d8f25dd3ebc1}",
+      "name": "Firmaprofesional SA",
+      "slug": "firmapro",
+      "links": {
+        "avatar": {
+          "href": "https://bitbucket.org/workspaces/firmapro/avatar/?ts=1705405545"
+        },
+        "html": {
+          "href": "https://bitbucket.org/firmapro/"
+        },
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/workspaces/firmapro"
+        }
+      }
+    },
+    "is_private": true,
+    "project": {
+      "type": "project",
+      "key": "PROD",
+      "uuid": "{5d36641f-cdf1-4bc1-b369-cd87280d6586}",
+      "name": "PRODUCTION",
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/workspaces/firmapro/projects/PROD"
+        },
+        "html": {
+          "href": "https://bitbucket.org/firmapro/workspace/projects/PROD"
+        },
+        "avatar": {
+          "href": "https://bitbucket.org/account/user/firmapro/projects/PROD/avatar/32?ts=1688384906"
+        }
+      }
+    },
+    "uuid": "{d848d9c6-e57f-404c-a9ea-512dd045a277}",
+    "parent": null
+  },
+  "actor": {
+    "display_name": "Miguel Lopez Ruiz",
+    "links": {
+      "self": {
+        "href": "https://api.bitbucket.org/2.0/users/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D"
+      },
+      "avatar": {
+        "href": "https://secure.gravatar.com/avatar/064779712153598106047287272db371?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FMR-4.png"
+      },
+      "html": {
+        "href": "https://bitbucket.org/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D/"
+      }
+    },
+    "type": "user",
+    "uuid": "{981c5124-f0f0-4b95-b543-82a33d53aabc}",
+    "account_id": "632c300b2eaaa5dcfa127810",
+    "nickname": "Miguel López Ruiz"
+  },
+  "pullrequest": {
+    "comment_count": 0,
+    "task_count": 0,
+    "type": "pullrequest",
+    "id": 6,
+    "title": "README.md edited online with Bitbucket",
+    "description": "README.md edited online with Bitbucket",
+    "rendered": {
+      "title": {
+        "type": "rendered",
+        "raw": "README.md edited online with Bitbucket",
+        "markup": "markdown",
+        "html": "<p>README.md edited online with Bitbucket</p>"
+      },
+      "description": {
+        "type": "rendered",
+        "raw": "README.md edited online with Bitbucket",
+        "markup": "markdown",
+        "html": "<p>README.md edited online with Bitbucket</p>"
+      }
+    },
+    "state": "OPEN",
+    "merge_commit": null,
+    "close_source_branch": true,
+    "closed_by": null,
+    "author": {
+      "display_name": "Miguel Lopez Ruiz",
+      "links": {
+        "self": {
+          "href": "https://api.bitbucket.org/2.0/users/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D"
+        },
+        "avatar": {
+          "href": "https://secure.gravatar.com/avatar/064779712153598106047287272db371?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FMR-4.png"
+        },
+        "html": {
+          "href": "https://bitbucket.org/%7B981c5124-f0f0-4b95-b543-82a33d53aabc%7D/"
+        }
+      },
+      "type": "user",
+      "uuid": "{981c5124-f0f0-4b95-b543-82a33d53aabc}",
+      "account_id": "632c300b2eaaa5dcfa127810",
+      "nickname": "Miguel López Ruiz"
+    },
+    "reason": "",
+    "created_on": "2024-04-29T12:53:34.364181+00:00",
+    "updated_on": "2024-04-29T12:53:35.636889+00:00",
+    "destination": {
+      "branch": {
+        "name": "main"
+      },
+      "commit": {
+        "hash": "24d9346b4d6d",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/commit/24d9346b4d6d"
+          },
+          "html": {
+            "href": "https://bitbucket.org/firmapro/releases-poc/commits/24d9346b4d6d"
+          }
+        },
+        "type": "commit"
+      },
+      "repository": {
+        "type": "repository",
+        "full_name": "firmapro/releases-poc",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc"
+          },
+          "html": {
+            "href": "https://bitbucket.org/firmapro/releases-poc"
+          },
+          "avatar": {
+            "href": "https://bytebucket.org/ravatar/%7Bd848d9c6-e57f-404c-a9ea-512dd045a277%7D?ts=default"
+          }
+        },
+        "name": "releases-poc",
+        "uuid": "{d848d9c6-e57f-404c-a9ea-512dd045a277}"
+      }
+    },
+    "source": {
+      "branch": {
+        "name": "Miguel-Lopez-Ruiz/readmemd-edited-online-with-bitbucket-1714395208913"
+      },
+      "commit": {
+        "hash": "da1a27fb4259",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/commit/da1a27fb4259"
+          },
+          "html": {
+            "href": "https://bitbucket.org/firmapro/releases-poc/commits/da1a27fb4259"
+          }
+        },
+        "type": "commit"
+      },
+      "repository": {
+        "type": "repository",
+        "full_name": "firmapro/releases-poc",
+        "links": {
+          "self": {
+            "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc"
+          },
+          "html": {
+            "href": "https://bitbucket.org/firmapro/releases-poc"
+          },
+          "avatar": {
+            "href": "https://bytebucket.org/ravatar/%7Bd848d9c6-e57f-404c-a9ea-512dd045a277%7D?ts=default"
+          }
+        },
+        "name": "releases-poc",
+        "uuid": "{d848d9c6-e57f-404c-a9ea-512dd045a277}"
+      }
+    },
+    "reviewers": [],
+    "participants": [],
+    "links": {
+      "self": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6"
+      },
+      "html": {
+        "href": "https://bitbucket.org/firmapro/releases-poc/pull-requests/6"
+      },
+      "commits": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6/commits"
+      },
+      "approve": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6/approve"
+      },
+      "request-changes": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6/request-changes"
+      },
+      "diff": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/diff/firmapro/releases-poc:da1a27fb4259%0D24d9346b4d6d?from_pullrequest_id=6&topic=true"
+      },
+      "diffstat": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/diffstat/firmapro/releases-poc:da1a27fb4259%0D24d9346b4d6d?from_pullrequest_id=6&topic=true"
+      },
+      "comments": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6/comments"
+      },
+      "activity": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6/activity"
+      },
+      "merge": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6/merge"
+      },
+      "decline": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6/decline"
+      },
+      "statuses": {
+        "href": "https://api.bitbucket.org/2.0/repositories/firmapro/releases-poc/pullrequests/6/statuses"
+      }
+    },
+    "summary": {
+      "type": "rendered",
+      "raw": "README.md edited online with Bitbucket",
+      "markup": "markdown",
+      "html": "<p>README.md edited online with Bitbucket</p>"
+    }
+  }
+}
