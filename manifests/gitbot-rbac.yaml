@@ -1,7 +1,7 @@
 ---
 apiVersion: v1
 kind: ServiceAccount
-automountServiceAccountToken: false
+# automountServiceAccountToken: false
 metadata:
   name: gitbot
   labels:
