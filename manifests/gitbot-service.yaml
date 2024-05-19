@@ -1,12 +1,15 @@
 ---
-apiVersion: policy/v1
-kind: PodDisruptionBudget
+apiVersion: v1
+kind: Service
 metadata:
   name: gitbot
   labels:
     app.kubernetes.io/name: gitbot
 spec:
-  maxUnavailable: 1
   selector:
-    matchLabels:
-      app.kubernetes.io/name: gitbot
+    app.kubernetes.io/name: gitbot
+  ports:
+    - name: web
+      port: 80
+      targetPort: 8080
+      protocol: TCP
