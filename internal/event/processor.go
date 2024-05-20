@@ -75,9 +75,10 @@ func ValidatePullRequestApps(e Event, apps []Application, action ProcessorResult
 
 	switch {
 
-	// Locking
-	case action == LockPullRequest && len(apps) == 0: // None app in pull request matching
+	case len(apps) == 0: // None app in pull request matching
 		return ValidationNotFound
+
+	// Locking
 	case action == LockPullRequest && alreadyLockedByAnother: // Locked by another pr
 		return ValidationAlreadyLockedByAnother
 	case action == LockPullRequest && branchNotMatch: // Already locked previusly
