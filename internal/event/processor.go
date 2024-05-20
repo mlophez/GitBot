@@ -1,40 +1,43 @@
 package event
 
 import (
-	mApp "gitbot/internal/app"
+	. "gitbot/types"
 	"regexp"
 	"strings"
 )
 
 type ProcessorResult int
+type Validation int
 
 const (
 	Nothing ProcessorResult = iota
 	LockPullRequest
 	UnlockPullRequest
+	ValidationUnknown Validation = iota
+	ValidationOk
+	ValidationNotFound
+	ValidationAlreadyLocked
+	ValidationAlreadyLockedByAnother
+	ValidationAlreadyUnLocked
+	ValidationBranchNotMatch
 )
 
-type iProcessor struct {
-	event Event
-}
-
-func (p iProcessor) ProcessEvent() ProcessorResult {
+func ProcessEvent(event Event) ProcessorResult {
 	var command string
 
 	// Get command from comment
-	filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)`).FindStringSubmatch(p.event.Comment)
+	filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)`).FindStringSubmatch(event.Comment)
 	if len(filter) == 4 {
 		command = filter[3]
 	}
 
-	switch p.event.Type {
+	switch event.Type {
 	case EventTypeMerged:
 		return UnlockPullRequest
 	case EventTypeDeclined:
 		return UnlockPullRequest
 	case EventTypeUpdated:
-		// Depends if already locked or not, Review
-		return Nothing
+		return Nothing // Depends if already locked or not, Review
 	case EventTypeCommented:
 		switch strings.ToUpper(command) {
 		case "LOCK", "DEPLOY", "TEST":
@@ -49,38 +52,48 @@ func (p iProcessor) ProcessEvent() ProcessorResult {
 	}
 }
 
-func (p iProcessor) isAlreadyLocked(apps []mApp.Application) bool {
-	for _, app := range apps {
-		if !(app.Locked && app.PullRequestId == p.event.PullRequestId) {
-			return false
-		}
-	}
-	return true
-}
+func ValidatePullRequestApps(e Event, apps []Application, action ProcessorResult) Validation {
+	//alreadyLocked := false // Pull request already was locked previusly
+	alreadyUnlocked := true
+	branchNotMatch := false
+	alreadyLockedByAnother := false
 
-func (p iProcessor) isMatchDestinationBranch(apps []mApp.Application) bool {
 	for _, app := range apps {
-		if p.event.PullRequestDestinationBranch != app.Branch {
-			return false
+		//if app.Locked && app.PullRequestId == e.PullRequestId {
+		//	alreadyLocked = true
+		//}
+		if app.Locked && app.PullRequestId != e.PullRequestId {
+			alreadyLockedByAnother = true
+		}
+		if !app.Locked && e.PullRequestDestinationBranch != app.Branch {
+			branchNotMatch = true
+		}
+		if e.PullRequestId == app.PullRequestId {
+			alreadyUnlocked = false
 		}
 	}
-	return true
-}
 
-func (p iProcessor) isLockedByAnotherPR(apps []mApp.Application) bool {
-	for _, app := range apps {
-		if app.Locked && app.PullRequestId != p.event.PullRequestId {
-			return true
-		}
-	}
-	return false
-}
+	switch {
 
-func (p iProcessor) isAlreadyUnlocked(apps []mApp.Application) bool {
-	for _, app := range apps {
-		if app.PullRequestId == p.event.PullRequestId {
-			return false
-		}
+	// Locking
+	case action == LockPullRequest && len(apps) == 0: // None app in pull request matching
+		return ValidationNotFound
+	case action == LockPullRequest && alreadyLockedByAnother: // Locked by another pr
+		return ValidationAlreadyLockedByAnother
+	case action == LockPullRequest && branchNotMatch: // Already locked previusly
+		return ValidationBranchNotMatch
+	//case action == LockPullRequest && alreadyLocked: // Already locked previusly
+	//	return ValidationOk
+	//return ValidationAlreadyLocked
+	case action == LockPullRequest:
+		return ValidationOk
+
+		// Unlocking
+	case action == UnlockPullRequest && alreadyUnlocked:
+		return ValidationAlreadyUnLocked
+	case action == UnlockPullRequest:
+		return ValidationOk
+	default:
+		return ValidationUnknown
 	}
-	return true
 }

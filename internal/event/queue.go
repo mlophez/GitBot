@@ -1,6 +1,9 @@
 package event
 
-import "gitbot/internal/event/queue"
+import (
+	"gitbot/internal/event/queue"
+	. "gitbot/types"
+)
 
 type Queue interface {
 	Enqueue(item QueueItem)
@@ -12,16 +15,6 @@ type Queue interface {
 type QueueItem struct {
 	event    Event
 	provider Provider
-}
-
-type QueueManager struct {
-	queue Queue
-}
-
-func NewQueueManager() *QueueManager {
-	return &QueueManager{
-		queue: &queue.MemoryQueue[QueueItem]{},
-	}
 }
 
 func NewMemoryQueue() *queue.MemoryQueue[QueueItem] {

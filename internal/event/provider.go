@@ -1,6 +1,7 @@
 package event
 
 import (
+	. "gitbot/types"
 	"io"
 	"net/http"
 )

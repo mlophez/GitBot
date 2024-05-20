@@ -5,35 +5,21 @@ import (
 	"net/http"
 )
 
-type Handler struct {
-	queue    Queue
-	provider Provider
-}
-
-func NewHandler(q Queue, p Provider) *Handler {
-	return &Handler{
-		queue:    q,
-		provider: p,
-	}
-}
-
-func (h *Handler) Handle() http.HandlerFunc {
+func Handle(q Queue, p Provider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		/* Get event from webhook */
-		event, err := h.provider.ParseEvent(r.Header, r.Body)
+		event, err := p.ParseEvent(r.Header, r.Body)
 		if err != nil {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
 			slog.Error("Error at parse webhook")
+			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}
 
-		/* Parse command here? or in process event? */
-		// Better in process event
-
 		/* Put event in queue */
-		item := QueueItem{event: event, provider: h.provider}
-		h.queue.Enqueue(item)
+		item := QueueItem{event: event, provider: p}
+		q.Enqueue(item)
 
+		/* Response */
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, err = w.Write([]byte("{}"))

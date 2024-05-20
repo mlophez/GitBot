@@ -15,11 +15,43 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
+
+const (
+	kubeconfig = "/home/mlr/Documents/Code/gitbot/kubeconfig"
+)
+
+func NewKubernetes() *kubernetes.Clientset {
+	config, err := func() (*rest.Config, error) {
+		_, exists := os.LookupEnv("KUBERNETES_SERVICE_HOST")
+		if exists {
+			return rest.InClusterConfig()
+		} else {
+			return clientcmd.BuildConfigFromFlags("", kubeconfig)
+		}
+	}()
+	if err != nil {
+		panic(err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err)
+	}
+
+	return clientset
+}
 
 func main() {
 	// Configure log
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	// Configure kubernetes
+	clientset := NewKubernetes()
 
 	// Configure webhook queue
 	queue := event.NewMemoryQueue()
@@ -29,9 +61,8 @@ func main() {
 	router.HandleFunc("GET /status", status)
 
 	// Setup Git Providers Routes
-	bitbucketProvider := provider.NewBitbucketProvider(config.Get("BITBUCKET_BEARER_TOKEN"))
-	bitbucketHandler := event.NewHandler(queue, bitbucketProvider)
-	router.HandleFunc("POST /api/v1/webhook/bitbucket", bitbucketHandler.Handle())
+	bitbucket := provider.NewBitbucketProvider(config.Get("BITBUCKET_BEARER_TOKEN"))
+	router.HandleFunc("POST /api/v1/webhook/bitbucket", event.Handle(queue, bitbucket))
 
 	// Starting Http Server
 	srv := &http.Server{Addr: ":" + config.Get("HTTP_PORT"), Handler: router}
@@ -46,8 +77,7 @@ func main() {
 	}()
 
 	// Start Event Queue Worker
-	worker := event.NewWorker(queue)
-	go worker.Start()
+	StopWorker := event.StartWorker(queue, clientset)
 
 	// Wait for shutdown signal
 	done := make(chan os.Signal, 1)
@@ -66,7 +96,7 @@ func main() {
 
 	// Stop event queue worker
 	slog.Info("Shutdown event queue...")
-	worker.Stop(ctx)
+	StopWorker(ctx)
 
 	slog.Info("Server Stopped...")
 	time.Sleep(3 * time.Second)

@@ -3,132 +3,107 @@ package event
 import (
 	"context"
 	mApp "gitbot/internal/app"
+	"gitbot/internal/config"
+	. "gitbot/types"
 	"log/slog"
 	"time"
+
+	"k8s.io/client-go/kubernetes"
 )
 
-type Worker struct {
-	quit  chan int
-	queue Queue
-}
+func StartWorker(q Queue, cs *kubernetes.Clientset) func(context.Context) {
+	quit := make(chan int)
+	go func() {
+		for {
+			select {
+			default:
+				time.Sleep(1 * time.Second)
 
-func NewWorker(q Queue) *Worker {
-	return &Worker{
-		quit:  make(chan int),
-		queue: q,
-	}
-}
+				// I/O. Get event from queue
+				next := q.Dequeue()
+				if next == nil {
+					continue
+				}
 
-func (w *Worker) Start() {
-	for {
-		select {
-		default:
-			time.Sleep(1 * time.Second)
+				slog.Info("Processing new event", "type", next.event.Type)
 
-			// I/O. Get event from queue
-			next := w.queue.Dequeue()
-			if next == nil {
-				continue
-			}
+				// Logic. Run Processor
+				action := ProcessEvent(next.event)
+				if action == Nothing {
+					continue
+				}
 
-			slog.Info("Processing new event", "type", next.event.Type)
+				apps, err := mApp.GetAllPulRequestApps(cs, next.event)
+				if err != nil {
+					slog.Error("Error at try get all apps filtered", "error", err)
+					continue
+				}
 
-			// Logic. Run Processor
-			p := iProcessor{event: next.event}
-			result := p.ProcessEvent()
-			if result == Nothing {
-				continue
-			}
+				validation := ValidatePullRequestApps(next.event, apps, action)
 
-			apps, err := mApp.FindAppsByRepoAndFiles(next.event.Repository, next.event.PullRequestFilesChanged)
-			if err != nil {
-				slog.Error(err.Error())
-			}
-
-			isPrAlreadyLocked := p.isAlreadyLocked(apps)                   // All apps locked by me
-			isPrMatchDestinationBranch := p.isMatchDestinationBranch(apps) // PrTargetBranch == AppCurrentBranch
-			isPrAlreadyUnlocked := p.isAlreadyUnlocked(apps)               // All apps of pr is unlocked by me
-			isAnyAppLockedByAnotherPr := p.isLockedByAnotherPR(apps)       // Some app of pr is locked by another pr
-
-			switch result {
-			case LockPullRequest:
-				if isPrAlreadyLocked {
-					slog.Warn("The pull request has already blocked all the apps", "pullrequest", next.event.PullRequestId)
-					w.response(next.event, next.provider, "The pull request has already blocked all the apps")
-				} else if isAnyAppLockedByAnotherPr {
+				switch validation {
+				case ValidationNotFound:
+					slog.Info("None app to process", "pullrequest", next.event.PullRequestId)
+					response(*next, "Your pull request files dont match with any app.")
+				case ValidationAlreadyLockedByAnother:
 					slog.Warn("One of the apps in the pull request is blocked by another pull request.", "pullrequest", next.event.PullRequestId)
-					w.response(next.event, next.provider, "One of the apps in the pull request is blocked by another pull request.")
-				} else if !isPrMatchDestinationBranch {
+					response(*next, "One of the apps in the pull request is blocked by another pull request.")
+				case ValidationBranchNotMatch:
 					slog.Warn("In one of the pull request apps, the target branch does not match the app", "pullrequest", next.event.PullRequestId)
-					w.response(next.event, next.provider, "In one of the pull request apps, the target branch does not match the app")
-				} else {
-					slog.Info("Locking pull request", "pullrequest", next.event.PullRequestId)
-					if err := w.lock(next.event, apps); err != nil {
-						slog.Error(err.Error())
-						w.response(next.event, next.provider, "Error at lock pull request")
-					} else {
-						w.response(next.event, next.provider, "The pull request was locked successfully")
+					response(*next, "In one of the pull request apps, the target branch does not match the app")
+				case ValidationAlreadyUnLocked:
+					response(*next, "The pull request was already unblocked")
+				case ValidationOk:
+					switch action {
+					case LockPullRequest:
+						mApp.LockApps(cs, apps, next.event.PullRequestSourceBranch, next.event.PullRequestId)
+						if err != nil {
+							response(*next, "Error at locked pull request")
+							continue
+						}
+						response(*next, "The pull request was locked successfully")
+					case UnlockPullRequest:
+						err := mApp.UnLockApps(cs, apps)
+						if err != nil {
+							response(*next, "Error at unlocked pull request")
+							continue
+						}
+						response(*next, "The pull request was unlocked successfully")
 					}
+				default:
+					slog.Warn("Unknown", "pullrequest", next.event.PullRequestId)
+					response(*next, "UnknownError")
 				}
-			case UnlockPullRequest:
-				if isPrAlreadyUnlocked {
-					slog.Warn("The pull request was already unlocked", "pullrequest", next.event.PullRequestId)
-					w.response(next.event, next.provider, "The pull request was already unblocked")
-				} else {
-					slog.Info("Unlocking pull request", "pullrequest", next.event.PullRequestId)
-					if err := w.unlock(next.event, apps); err != nil {
-						slog.Error(err.Error())
-						w.response(next.event, next.provider, "Error at unlock pull request")
-					} else {
-						w.response(next.event, next.provider, "The pull request was unlocked successfully")
-					}
-				}
-			}
 
-		case <-w.quit:
-			return
-		}
-	}
-}
-
-func (w *Worker) Stop(ctx context.Context) {
-	defer close(w.quit)
-	for {
-		select {
-		default:
-			time.Sleep(1 * time.Second)
-			if w.queue.Size() <= 0 {
+			case <-quit:
 				return
 			}
-		case <-ctx.Done():
-			return
 		}
-	}
-}
+	}()
 
-func (w Worker) lock(e Event, apps []mApp.Application) error {
-	for _, app := range apps {
-		if _, err := mApp.LockApp(app, e.PullRequestSourceBranch, e.PullRequestId); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (w Worker) unlock(e Event, apps []mApp.Application) error {
-	for _, app := range apps {
-		if app.Locked && app.PullRequestId == e.PullRequestId {
-			_, err := mApp.UnlockApp(app)
-			if err != nil {
-				return err
+	return func(ctx context.Context) {
+		defer close(quit)
+		for {
+			select {
+			default:
+				time.Sleep(1 * time.Second)
+				if q.Size() <= 0 {
+					return
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
+
 	}
-	return nil
 }
 
-func (w Worker) response(e Event, p Provider, msg string) {
-	if err := p.WriteComment(e.Repository, e.PullRequestId, e.CommentId, msg); err != nil {
-		slog.Error(err.Error())
+func response(item QueueItem, msg string) {
+	prefix := config.Get("PROVIDER_COMMENT_PREFIX")
+	if prefix != "" {
+		msg = prefix + " " + msg
+	}
+	if err := item.provider.WriteComment(item.event.Repository, item.event.PullRequestId, item.event.CommentId, msg); err != nil {
+		slog.Error("Error at respond to provider", "error", err)
 	}
 }

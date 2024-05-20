@@ -1,4 +1,4 @@
-package app
+package types
 
 type Application struct {
 	Name          string
