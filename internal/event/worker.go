@@ -4,7 +4,6 @@ import (
 	"context"
 	mApp "gitbot/internal/app"
 	"gitbot/internal/config"
-	. "gitbot/types"
 	"log/slog"
 	"time"
 
@@ -44,7 +43,6 @@ func StartWorker(q Queue, cs *kubernetes.Clientset) func(context.Context) {
 				switch validation {
 				case ValidationNotFound:
 					slog.Info("None app to process", "pullrequest", next.event.PullRequestId)
-					response(*next, "Your pull request files dont match with any app.")
 				case ValidationAlreadyLockedByAnother:
 					slog.Warn("One of the apps in the pull request is blocked by another pull request.", "pullrequest", next.event.PullRequestId)
 					response(*next, "One of the apps in the pull request is blocked by another pull request.")
@@ -99,9 +97,9 @@ func StartWorker(q Queue, cs *kubernetes.Clientset) func(context.Context) {
 }
 
 func response(item QueueItem, msg string) {
-	prefix := config.Get("PROVIDER_COMMENT_PREFIX")
-	if prefix != "" {
-		msg = prefix + " " + msg
+	clusterName := config.Get("CLUSTER_NAME")
+	if clusterName != "" {
+		msg = "[" + clusterName + "] " + msg
 	}
 	if err := item.provider.WriteComment(item.event.Repository, item.event.PullRequestId, item.event.CommentId, msg); err != nil {
 		slog.Error("Error at respond to provider", "error", err)
