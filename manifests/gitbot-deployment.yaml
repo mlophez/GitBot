@@ -20,6 +20,7 @@ spec:
       labels:
         app.kubernetes.io/name: gitbot
     spec:
+      serviceAccountName: gitbot
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       securityContext:
@@ -28,53 +29,53 @@ spec:
         runAsGroup: 30000
         runAsNonRoot: true
       topologySpreadConstraints:
-      - maxSkew: 1
-        topologyKey: "topology.kubernetes.io/zone"
-        whenUnsatisfiable: ScheduleAnyway
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/name: gitbot
-      - maxSkew: 1
-        topologyKey: "kubernetes.io/hostname"
-        whenUnsatisfiable: DoNotSchedule
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/name: gitbot
+        - maxSkew: 1
+          topologyKey: "topology.kubernetes.io/zone"
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitbot
+        - maxSkew: 1
+          topologyKey: "kubernetes.io/hostname"
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: gitbot
       containers:
-      - name: gitbot
-        image: docker.io/lgtjpmora/gitbot:dev
-        imagePullPolicy: Always
-        securityContext:
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
-        ports:
-        - name: http
-          containerPort: 8080
-        envFrom:
-          - secretRef:
-              name: gitbot
-        resources:
-          requests:
-            cpu: 10m
-            memory: 256Mi
-          limits:
-            memory: 256Mi
-        livenessProbe:
-          tcpSocket:
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-          successThreshold: 1
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /status
-            port: http
-          initialDelaySeconds: 5
-          periodSeconds: 3
-          timeoutSeconds: 3
-          successThreshold: 2
-          failureThreshold: 2
+        - name: gitbot
+          image: docker.io/lgtjpmora/gitbot:dev
+          imagePullPolicy: Always
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: gitbot
+          resources:
+            requests:
+              cpu: 10m
+              memory: 256Mi
+            limits:
+              memory: 256Mi
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            timeoutSeconds: 3
+            successThreshold: 2
+            failureThreshold: 2
