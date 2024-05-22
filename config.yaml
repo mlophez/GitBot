@@ -1,0 +1,21 @@
+---
+clusters:
+  - name: prod
+    inside: https://F014FC5DAE0A9C41F698C9375CC5DB7D.gr7.eu-south-2.eks.amazonaws.com
+    auth_type: serviceaccount
+  - name: demo
+    inside: https://F014FC5DAE0A9C41F698C9375CC5DB7D.gr7.eu-south-2.eks.amazonaws.com
+    auth_type: aws
+    aws_role: arn:aws:iam::<account_id>:role/<role_name>
+security:
+  groups:
+    - name: testing
+      users:
+        - david.gonzalez@logalty.com
+  rules:
+    - repository: https://bitbucket.org/firmapro/kubernetes.git
+      filepattern: ["overlays/test/**", ""]
+      action: ["lock", "unlock"]
+      group: ["testing"]
+      user:
+        - miguel.lopez@logalty.com

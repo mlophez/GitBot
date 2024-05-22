@@ -9,6 +9,10 @@ type MemoryQueue[T any] struct {
 	mu    sync.Mutex
 }
 
+func NewMemoryQueue[T any]() *MemoryQueue[T] {
+	return &MemoryQueue[T]{}
+}
+
 func (q *MemoryQueue[T]) Enqueue(item T) {
 	q.mu.Lock()
 	defer q.mu.Unlock()

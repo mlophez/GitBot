@@ -6,8 +6,9 @@ import (
 	"errors"
 	"gitbot/internal/config"
 	"gitbot/internal/event"
-
 	"gitbot/internal/event/provider"
+	"gitbot/internal/event/queue"
+	"gitbot/internal/event/worker"
 
 	"log/slog"
 	"net/http"
@@ -46,23 +47,32 @@ func NewKubernetes() *kubernetes.Clientset {
 	return clientset
 }
 
+type Server struct {
+}
+
 func main() {
 	// Configure log
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
+	// Load config
+	//config := config.Load(config.Get("CONFIG_FILE"))
+
 	// Configure kubernetes
-	clientset := NewKubernetes()
+	//clientset := NewKubernetes()
 
 	// Configure webhook queue
-	queue := event.NewMemoryQueue()
+	queue := queue.NewMemoryQueue[event.QueueItem]()
+	worker := worker.NewWorker(queue)
 
-	// New Router for Http Server
+	// Handlers
+	bitbucketProvider := provider.NewBitbucketProvider(config.Get("BITBUCKET_BEARER_TOKEN"))
+	bitbucketHandler := event.NewHandler(queue, bitbucketProvider)
+
+	// Routes
 	router := http.NewServeMux()
-	router.HandleFunc("GET /status", status)
 
-	// Setup Git Providers Routes
-	bitbucket := provider.NewBitbucketProvider(config.Get("BITBUCKET_BEARER_TOKEN"))
-	router.HandleFunc("POST /api/v1/webhook/bitbucket", event.Handle(queue, bitbucket))
+	router.HandleFunc("GET /status", status)
+	router.HandleFunc("POST /api/v1/webhook/bitbucket", bitbucketHandler.Handle())
 
 	// Starting Http Server
 	srv := &http.Server{Addr: ":" + config.Get("HTTP_PORT"), Handler: router}
@@ -77,7 +87,7 @@ func main() {
 	}()
 
 	// Start Event Queue Worker
-	StopWorker := event.StartWorker(queue, clientset)
+	go worker.Start()
 
 	// Wait for shutdown signal
 	done := make(chan os.Signal, 1)
@@ -96,7 +106,7 @@ func main() {
 
 	// Stop event queue worker
 	slog.Info("Shutdown event queue...")
-	StopWorker(ctx)
+	worker.Stop(ctx)
 
 	slog.Info("Server Stopped...")
 	time.Sleep(3 * time.Second)
