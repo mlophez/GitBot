@@ -8,7 +8,6 @@ import (
 	"gitbot/internal/event"
 	"gitbot/internal/event/provider"
 	"gitbot/internal/event/queue"
-	"gitbot/internal/event/worker"
 
 	"log/slog"
 	"net/http"
@@ -16,36 +15,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
-
-const (
-	kubeconfig = "/home/mlr/Documents/Code/gitbot/kubeconfig"
-)
-
-func NewKubernetes() *kubernetes.Clientset {
-	config, err := func() (*rest.Config, error) {
-		_, exists := os.LookupEnv("KUBERNETES_SERVICE_HOST")
-		if exists {
-			return rest.InClusterConfig()
-		} else {
-			return clientcmd.BuildConfigFromFlags("", kubeconfig)
-		}
-	}()
-	if err != nil {
-		panic(err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err)
-	}
-
-	return clientset
-}
 
 type Server struct {
 }
@@ -55,29 +25,27 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
 	// Load config
-	//config := config.Load(config.Get("CONFIG_FILE"))
+	c := config.Load()
 
-	// Configure kubernetes
-	//clientset := NewKubernetes()
-
-	// Configure webhook queue
+	/* Events */
+	// Service
 	queue := queue.NewMemoryQueue[event.QueueItem]()
-	worker := worker.NewWorker(queue)
-
+	eService := event.NewService(queue, c.SecurityRules)
+	// Worker
+	worker := event.NewWorker(eService)
 	// Handlers
-	bitbucketProvider := provider.NewBitbucketProvider(config.Get("BITBUCKET_BEARER_TOKEN"))
-	bitbucketHandler := event.NewHandler(queue, bitbucketProvider)
+	bitbucket := provider.NewBitbucketProvider(c.BitbucketBearerToken)
+	bitbucketHandler := event.NewHandler(eService, bitbucket)
 
-	// Routes
+	/* Routes */
 	router := http.NewServeMux()
-
 	router.HandleFunc("GET /status", status)
 	router.HandleFunc("POST /api/v1/webhook/bitbucket", bitbucketHandler.Handle())
 
 	// Starting Http Server
-	srv := &http.Server{Addr: ":" + config.Get("HTTP_PORT"), Handler: router}
+	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: router}
 	go func() {
-		slog.Info("Starting server in port :" + config.Get("HTTP_PORT"))
+		slog.Info("Starting server in port :" + c.HttpPort)
 		err := srv.ListenAndServe()
 
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {

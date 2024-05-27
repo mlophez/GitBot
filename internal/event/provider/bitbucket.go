@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"gitbot/internal/types"
+	"gitbot/internal/event"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,9 +21,9 @@ func NewBitbucketProvider(token string) *BitbucketProvider {
 	}
 }
 
-func (b BitbucketProvider) ParseEvent(headers http.Header, body io.ReadCloser) (types.Event, error) {
+func (b BitbucketProvider) ParseEvent(headers http.Header, body io.ReadCloser) (event.Event, error) {
 	var webhook bpWebhookRequest
-	var e types.Event
+	var e event.Event
 
 	err := json.NewDecoder(body).Decode(&webhook)
 	if err != nil {
@@ -47,17 +47,17 @@ func (b BitbucketProvider) ParseEvent(headers http.Header, body io.ReadCloser) (
 	eventKey := headers.Get("X-Event-Key")
 	switch strings.ToLower(eventKey) {
 	case "pullrequest:created":
-		e.Type = types.EventTypeOpened
+		e.Type = event.EventTypeOpened
 	case "pullrequest:updated":
-		e.Type = types.EventTypeUpdated
+		e.Type = event.EventTypeUpdated
 	case "pullrequest:fulfilled":
-		e.Type = types.EventTypeMerged
+		e.Type = event.EventTypeMerged
 	case "pullrequest:rejected":
-		e.Type = types.EventTypeDeclined
+		e.Type = event.EventTypeDeclined
 	case "pullrequest:comment_created":
-		e.Type = types.EventTypeCommented
+		e.Type = event.EventTypeCommented
 	default:
-		e.Type = types.EventTypeUnknown
+		e.Type = event.EventTypeUnknown
 	}
 
 	// Get Changelog

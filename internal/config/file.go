@@ -1,8 +1,28 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
 
-func (c iYamlConfigFile) validate() error {
+	"gitbot/internal/event"
+)
+
+type ConfigFile struct {
+	Security struct {
+		Groups []struct {
+			Name  string   `yaml:"name"`
+			Users []string `yaml:"users"`
+		} `yaml:"groups"`
+		Rules []struct {
+			Respository     string   `yaml:"repository"`
+			FilePatternList []string `yaml:"filepattern"`
+			ActionList      []string `yaml:"action"`
+			GroupList       []string `yaml:"group"`
+			UserList        []string `yaml:"user"`
+		} `yaml:"rules"`
+	} `yaml:"security"`
+}
+
+func (c ConfigFile) validate() error {
 
 	// Group has any user
 	if err := c.hasEmptyGroup(); err != nil {
@@ -26,7 +46,7 @@ func (c iYamlConfigFile) validate() error {
 	return nil
 }
 
-func (c iYamlConfigFile) hasEmptyGroup() error {
+func (c ConfigFile) hasEmptyGroup() error {
 	for _, g := range c.Security.Groups {
 		if len(g.Users) == 0 {
 			return fmt.Errorf("Group '%s' is empty", g.Name)
@@ -36,7 +56,7 @@ func (c iYamlConfigFile) hasEmptyGroup() error {
 	return nil
 }
 
-func (c iYamlConfigFile) hasRuleGroupThatExists() error {
+func (c ConfigFile) hasRuleGroupThatExists() error {
 	for _, rule := range c.Security.Rules {
 		for _, group := range rule.GroupList {
 			exists := false
@@ -53,7 +73,7 @@ func (c iYamlConfigFile) hasRuleGroupThatExists() error {
 	return nil
 }
 
-func (c iYamlConfigFile) hasRuleCorrectActions() error {
+func (c ConfigFile) hasRuleCorrectActions() error {
 	for _, rule := range c.Security.Rules {
 		for _, action := range rule.ActionList {
 			if !(action == "lock" || action == "unlock") {
@@ -64,7 +84,7 @@ func (c iYamlConfigFile) hasRuleCorrectActions() error {
 	return nil
 }
 
-func (c iYamlConfigFile) hasRuleFieldEmpty() error {
+func (c ConfigFile) hasRuleFieldEmpty() error {
 	for _, rule := range c.Security.Rules {
 		if len(rule.ActionList) == 0 {
 			return fmt.Errorf("The field action is empty")
@@ -77,4 +97,31 @@ func (c iYamlConfigFile) hasRuleFieldEmpty() error {
 		}
 	}
 	return nil
+}
+
+func (c ConfigFile) seRules() []event.SecurityRule {
+	var result []event.SecurityRule
+
+	for _, r := range c.Security.Rules {
+		// Add users from group to userlist
+		userList := r.UserList
+		for _, group := range r.GroupList {
+			for _, g := range c.Security.Groups {
+				if group != g.Name {
+					continue
+				}
+				userList = append(userList, g.Users...)
+			}
+		}
+
+		// create final securityrule
+		result = append(result, event.SecurityRule{
+			Repository:   r.Respository,
+			FilePatterns: r.FilePatternList,
+			Actions:      r.ActionList,
+			Users:        userList,
+		})
+	}
+
+	return result
 }

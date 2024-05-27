@@ -4,7 +4,7 @@ test:
 	cd src/; go test
 
 run:
-	go run ./cmd/main.go
+	CONFIG_FILE=config.yaml go run ./cmd/main.go
 
 build-image:
 	export DOCKER_BUILDKIT=1

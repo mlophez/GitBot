@@ -1,20 +1,19 @@
-package worker
+package event
 
 import (
 	"context"
-	"gitbot/internal/event"
 	"time"
 )
 
 type Worker struct {
-	quit  chan int
-	queue event.Queue
+	service Service
+	quit    chan int
 }
 
-func NewWorker(q event.Queue) *Worker {
+func NewWorker(s Service) *Worker {
 	return &Worker{
-		quit:  make(chan int),
-		queue: q,
+		quit:    make(chan int),
+		service: s,
 	}
 }
 
@@ -24,11 +23,11 @@ func (w *Worker) Start() {
 		default:
 			time.Sleep(1 * time.Second)
 			// Get event from queue
-			next := w.queue.Dequeue()
+			next := w.service.queue.Dequeue()
 			if next == nil {
 				continue
 			}
-			next.Handler.ProcessEvent(next.Event)
+			w.service.ProcessEvent(next.Event, next.Provider)
 		case <-w.quit:
 			return
 		}
@@ -41,7 +40,7 @@ func (w *Worker) Stop(ctx context.Context) {
 		select {
 		default:
 			time.Sleep(1 * time.Second)
-			if w.queue.Size() <= 0 {
+			if w.service.queue.Size() <= 0 {
 				return
 			}
 		case <-ctx.Done():
