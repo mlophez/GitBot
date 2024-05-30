@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"gopkg.in/yaml.v3"
+	//"gopkg.in/yaml.v3"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -20,6 +20,7 @@ type Config struct {
 	SecurityRules        []event.SecurityRule
 	BitbucketBearerToken string
 	ClientSet            *kubernetes.Clientset
+	ClusterName          string
 	// *Clusters
 	// ** clientset
 }
@@ -40,36 +41,38 @@ func Get(key string) string {
 }
 
 func Load() *Config {
-	filepath := Get("CONFIG_FILE")
+	err := godotenv.Load("env.ini")
+	if err != nil {
+		panic("Error loading .env file")
+	}
 
-	//err := godotenv.Load("env.ini")
+	//filepath := Get("CONFIG_FILE")
+
+	//data, err := os.ReadFile(filepath)
 	//if err != nil {
-	//	panic("Error loading .env file")
+	//	panic(err)
 	//}
 
-	data, err := os.ReadFile(filepath)
-	if err != nil {
-		panic(err)
-	}
+	//var configfile ConfigFile
+	//err = yaml.Unmarshal(data, &configfile)
+	//if err != nil {
+	//	panic(err)
+	//}
 
-	var configfile ConfigFile
-	err = yaml.Unmarshal(data, &configfile)
-	if err != nil {
-		panic(err)
-	}
+	//// validate
+	//if err := configfile.validate(); err != nil {
+	//	panic(err)
+	//}
 
-	// validate
-	if err := configfile.validate(); err != nil {
-		panic(err)
-	}
-
-	// Get security rules from configfile
-	sg := configfile.seRules()
+	//// Get security rules from configfile
+	//sg := configfile.seRules()
 
 	return &Config{
-		SecurityRules:        sg,
+		//SecurityRules:        sg,
+		SecurityRules:        []event.SecurityRule{},
 		HttpPort:             Get("HTTP_PORT"),
 		BitbucketBearerToken: Get("BITBUCKET_BEARER_TOKEN"),
+		ClusterName:          Get("CLUSTER_NAME"),
 		ClientSet:            NewKubernetes(),
 	}
 }

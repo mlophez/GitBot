@@ -7,12 +7,12 @@ import (
 
 type Handler struct {
 	provider Provider
-	service  Service
+	queue    Queue
 }
 
-func NewHandler(s Service, p Provider) *Handler {
+func NewHandler(q Queue, p Provider) *Handler {
 	return &Handler{
-		service:  s,
+		queue:    q,
 		provider: p,
 	}
 }
@@ -29,7 +29,7 @@ func (h Handler) Handle() http.HandlerFunc {
 
 		/* Put event in queue */
 		item := QueueItem{Event: e, Provider: h.provider}
-		h.service.queue.Enqueue(item)
+		h.queue.Enqueue(item)
 
 		/* Response */
 		w.Header().Set("Content-Type", "application/json")

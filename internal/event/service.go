@@ -1,95 +1,221 @@
 package event
 
-import "log/slog"
+import (
+	"fmt"
+	"gitbot/internal/app"
+	"log/slog"
+	"regexp"
+	"strings"
+)
 
-type Service struct {
-	queue Queue
-	rules []SecurityRule
+/*** Event Response ***/
+type Response struct {
+	Success bool
+	Summary []AppStatus
 }
 
-func NewService(q Queue, rules []SecurityRule) Service {
+type AppStatus struct {
+	Name    string
+	Message string
+}
+
+/*** Action Interface ***/
+type Action int
+
+const (
+	LOCK_ACTION Action = iota
+	UNLOCK_ACTION
+	UNKNOWN_ACTION
+)
+
+/*** Service ***/
+type Service struct {
+	rules      []SecurityRule
+	appService app.Service
+}
+
+func NewService(rules []SecurityRule, appService app.Service) Service {
 	return Service{
-		queue: q,
-		rules: rules,
+		rules:      rules,
+		appService: appService,
 	}
 }
 
-func (s Service) ProcessEvent(e Event, p Provider) {
+func (s Service) Process(e Event) *Response {
 	slog.Info("Processing new event", "type", e.Type)
 
-	// Get if action is needed
-	//action :=
+	/* Get action */
+	action := getActionFromEvent(e)
+	if action == UNKNOWN_ACTION {
+		return nil
+	}
 
-	// If action get all apps
+	/* Get apps from cluster */
+	apps, err := s.appService.FindAppsByRepoAndFiles(e.Repository, e.PullRequest.FilesChanged)
+	if err != nil {
+		slog.Error("Error at try get apps", "error", err)
+		return nil
+	} else if len(apps) == 0 {
+		slog.Info("Not apps founds")
+		return nil
+	}
 
-	// Check security
-
-	// Checks
-
-	// Lock or Unlock
-
-	slog.Info("End Processing", "type", e.Type)
+	switch action {
+	case LOCK_ACTION:
+		return s.lockPullRequest(e.PullRequest, apps)
+	case UNLOCK_ACTION:
+		return s.unlockPullRequest(e, e.PullRequest, apps)
+	default:
+		return nil
+	}
 }
 
-//slog.Info("Processing new event", "type", next.event.Type)
+func getActionFromEvent(e Event) Action {
+	switch e.Type {
 
-// Logic. Run Processor
-//action := ProcessEvent(next.event)
-//if action == Nothing {
-//	continue
-//}
+	case EventTypeMerged:
+		return UNLOCK_ACTION
 
-// // Security
-// // match = security.Match(user string, action Action, rules []SecurityRule)
-//
-// // Get from all cluster
-// apps, err := mApp.GetAllPulRequestApps(cs, next.event)
-// if err != nil {
-// 	slog.Error("Error at try get all apps filtered", "error", err)
-// 	continue
-// }
-//
-// validation := ValidatePullRequestApps(next.event, apps, action)
-//
-// switch validation {
-// case ValidationNotFound:
-// 	slog.Info("None app to process", "pullrequest", next.event.PullRequestId)
-// case ValidationAlreadyLockedByAnother:
-// 	slog.Warn("One of the apps in the pull request is blocked by another pull request.", "pullrequest", next.event.PullRequestId)
-// 	response(*next, "One of the apps in the pull request is blocked by another pull request.")
-// case ValidationBranchNotMatch:
-// 	slog.Warn("In one of the pull request apps, the target branch does not match the app", "pullrequest", next.event.PullRequestId)
-// 	response(*next, "In one of the pull request apps, the target branch does not match the app")
-// case ValidationAlreadyUnLocked:
-// 	response(*next, "The pull request was already unblocked")
-// case ValidationOk:
-// 	switch action {
-// 	case LockPullRequest:
-// 		err := mApp.LockApps(cs, apps, next.event.PullRequestSourceBranch, next.event.PullRequestId)
-// 		if err != nil {
-// 			response(*next, "Error at locked pull request")
-// 			continue
-// 		}
-// 		response(*next, "The pull request was locked successfully")
-// 	case UnlockPullRequest:
-// 		err := mApp.UnLockApps(cs, apps)
-// 		if err != nil {
-// 			response(*next, "Error at unlocked pull request")
-// 			continue
-// 		}
-// 		response(*next, "The pull request was unlocked successfully")
-// 	}
-// default:
-// 	slog.Warn("Unknown", "pullrequest", next.event.PullRequestId)
-// 	response(*next, "UnknownError")
-// }
+	case EventTypeDeclined:
+		return UNLOCK_ACTION
 
-//func response(item QueueItem, msg string) {
-//	clusterName := config.Get("CLUSTER_NAME")
-//	if clusterName != "" {
-//		msg = "[" + clusterName + "] " + msg
-//	}
-//	if err := item.provider.WriteComment(item.event.Repository, item.event.PullRequestId, item.event.CommentId, msg); err != nil {
-//		slog.Error("Error at respond to provider", "error", err)
-//	}
-//}
+	case EventTypeCommented:
+		var command string
+
+		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)`).FindStringSubmatch(e.Comment)
+		if len(filter) == 4 {
+			command = filter[3]
+		}
+
+		switch strings.ToUpper(command) {
+		case "LOCK", "DEPLOY", "TEST":
+			return LOCK_ACTION
+
+		case "UNLOCK", "UNDEPLOY", "ROLLBACK":
+			return UNLOCK_ACTION
+		}
+	}
+
+	return UNKNOWN_ACTION
+}
+
+func (s Service) lockPullRequest(pr PullRequest, apps []app.Application) *Response {
+	resp := Response{Success: true}
+
+	isAnyLockedByAnother := false
+	isAnyTargetRevisionDontMatch := false
+	// hasPermissionForAll := false
+
+	for _, a := range apps {
+		switch {
+		// LOCKED_BY_ANOTHER
+		case a.Locked && a.PullRequestId != pr.Id:
+			isAnyLockedByAnother = true
+			resp.Summary = append(resp.Summary, AppStatus{
+				Name:    a.Name,
+				Message: fmt.Sprintf("This app is blocked by another pr (%d)", a.PullRequestId),
+			})
+		// LOCKED_BY_ME
+		case a.Locked:
+			resp.Summary = append(resp.Summary, AppStatus{
+				Name:    a.Name,
+				Message: "Locked",
+			})
+		// TARGET_BRANCH_NOT_MATCH
+		case a.Branch != pr.DestinationBranch:
+			isAnyTargetRevisionDontMatch = true
+			resp.Summary = append(resp.Summary, AppStatus{
+				Name:    a.Name,
+				Message: fmt.Sprintf("App with branch '%s' dont match with pull request target branch '%s')", a.Branch, pr.DestinationBranch),
+			})
+		// UNLOCKED
+		default:
+			resp.Summary = append(resp.Summary, AppStatus{
+				Name:    a.Name,
+				Message: "Unlocked",
+			})
+		}
+	}
+
+	//if isAnyTargetRevisionDontMatch || isAnyLockedByAnother || !hasPermissionForAll {
+	if isAnyTargetRevisionDontMatch || isAnyLockedByAnother {
+		resp.Success = false
+		return &resp
+	}
+
+	for i, a := range apps {
+		if !a.Locked {
+			slog.Info("Locking application", "app", a.Name)
+			err := s.appService.LockApp(a, pr.SourceBranch, pr.Id)
+			if err != nil {
+				slog.Error("Error at locking app", "error", err)
+				resp.Success = false
+				resp.Summary[i].Message = "Error at lock application"
+				return &resp
+			}
+
+			resp.Summary[i].Message = "Locked"
+		}
+	}
+
+	return &resp
+}
+
+func (s Service) unlockPullRequest(e Event, pr PullRequest, apps []app.Application) *Response {
+	resp := Response{Success: true}
+
+	isAnyLockedByMe := false
+	// hasPermissionForAll := false
+
+	for _, a := range apps {
+		switch {
+		// LOCKED_BY_ANOTHER
+		case a.Locked && a.PullRequestId != pr.Id:
+			resp.Summary = append(resp.Summary, AppStatus{
+				Name:    a.Name,
+				Message: fmt.Sprintf("This app is blocked by another pr (%d)", a.PullRequestId),
+			})
+		// LOCKED_BY_ME
+		case a.Locked:
+			isAnyLockedByMe = true
+			resp.Summary = append(resp.Summary, AppStatus{
+				Name:    a.Name,
+				Message: "Locked",
+			})
+			// UNLOCKED
+		default:
+			resp.Summary = append(resp.Summary, AppStatus{
+				Name:    a.Name,
+				Message: "Unlocked",
+			})
+		}
+	}
+
+	if !isAnyLockedByMe {
+		if e.Type == EventTypeMerged || e.Type == EventTypeDeclined {
+			return nil
+		}
+		return &resp
+	}
+
+	//if !hasPermissionForAll {
+	//	resp.Success = false
+	//	return &resp
+	//}
+
+	for i, a := range apps {
+		if a.Locked {
+			err := s.appService.UnlockApp(a)
+			if err != nil {
+				slog.Error("Error at unlocking app", "error", err)
+				resp.Success = false
+				resp.Summary[i].Message = "Error at unlock application"
+				return &resp
+			}
+
+			resp.Summary[i].Message = "Unlocked"
+		}
+	}
+
+	return &resp
+}

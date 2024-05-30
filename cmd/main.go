@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"gitbot/internal/app"
 	"gitbot/internal/config"
 	"gitbot/internal/event"
 	"gitbot/internal/event/provider"
@@ -29,13 +30,14 @@ func main() {
 
 	/* Events */
 	// Service
+	aService := app.NewService(c.ClientSet)
 	queue := queue.NewMemoryQueue[event.QueueItem]()
-	eService := event.NewService(queue, c.SecurityRules)
+	eService := event.NewService(c.SecurityRules, aService)
 	// Worker
-	worker := event.NewWorker(eService)
+	worker := event.NewWorker(queue, eService, c.ClusterName)
 	// Handlers
 	bitbucket := provider.NewBitbucketProvider(c.BitbucketBearerToken)
-	bitbucketHandler := event.NewHandler(eService, bitbucket)
+	bitbucketHandler := event.NewHandler(queue, bitbucket)
 
 	/* Routes */
 	router := http.NewServeMux()

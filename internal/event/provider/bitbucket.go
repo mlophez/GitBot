@@ -122,7 +122,8 @@ func (b BitbucketProvider) WriteComment(repo string, prId int, parentId int, msg
 	if parentId > 0 {
 		var requestBody bpWriteCommentRequestParent
 		requestBody.Parent.Id = parentId
-		requestBody.Content.Raw = "**" + msg + "**"
+		requestBody.Content.Raw = msg
+		// requestBody.Content.Raw = "**" + msg + "**"
 		p, err := json.Marshal(&requestBody)
 		if err != nil {
 			return err
@@ -130,7 +131,8 @@ func (b BitbucketProvider) WriteComment(repo string, prId int, parentId int, msg
 		payload = p
 	} else {
 		var requestBody bpWriteCommentRequest
-		requestBody.Content.Raw = "**" + msg + "**"
+		requestBody.Content.Raw = msg
+		// requestBody.Content.Raw = "**" + msg + "**"
 		p, err := json.Marshal(&requestBody)
 		if err != nil {
 			return err

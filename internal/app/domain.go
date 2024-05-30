@@ -7,5 +7,6 @@ type Application struct {
 	Paths         []string
 	Locked        bool
 	PullRequestId int
+	ProviderId    int
 	LastBranch    string
 }
