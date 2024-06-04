@@ -10,3 +10,10 @@ type Application struct {
 	ProviderId    int
 	LastBranch    string
 }
+
+func (app Application) sanitize() Application {
+	if app.Locked && app.LastBranch == app.Branch {
+		app.Locked = false
+	}
+	return app
+}

@@ -8,3 +8,10 @@ func contains[T comparable](slice []T, item T) bool {
 	}
 	return false
 }
+
+func IFTernary[T any](condition bool, trueVal T, falseVal T) T {
+	if condition {
+		return trueVal
+	}
+	return falseVal
+}
