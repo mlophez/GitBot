@@ -63,11 +63,11 @@ func (s Service) Process(e Event) *Response {
 
 	/* Check if action is permitted */
 	if e.PullRequest.Approved == 0 {
-		return &Response{Success: false, Message: "You need at least one approval from a reviewer."}
+		return &Response{Success: false, Message: "You need at least one approval from a reviewer"}
 	}
 
 	if e.PullRequest.RequestChanged > 0 {
-		return &Response{Success: false, Message: "One of the reviewers has requested changes."}
+		return &Response{Success: false, Message: "One of the reviewers has requested changes"}
 	}
 
 	switch action {
