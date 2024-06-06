@@ -73,8 +73,12 @@ func (w Worker) responseProvider(item QueueItem, resp *Response) {
 		msg = "### Status: **" + utils.IFTernary(resp.Success, "Success", "Failed") + "**"
 	}
 
-	for _, app := range resp.Summary {
-		msg = msg + "- **" + strings.ToUpper(app.Name) + ":** " + app.Message + ".  \n"
+	if resp.Message != "" {
+		msg = msg + resp.Message + ".  \n"
+	} else {
+		for _, app := range resp.Summary {
+			msg = msg + "- **" + strings.ToUpper(app.Name) + ":** " + app.Message + ".  \n"
+		}
 	}
 
 	if err := item.Provider.WriteComment(item.Event.Repository, item.Event.PullRequest.Id, item.Event.CommentId, msg); err != nil {

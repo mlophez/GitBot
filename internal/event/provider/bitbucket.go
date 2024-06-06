@@ -67,6 +67,19 @@ func (b BitbucketProvider) ParseEvent(headers http.Header, body io.ReadCloser) (
 	}
 	e.PullRequest.FilesChanged = filesChanged
 
+	// Approved and Request changeds
+	e.PullRequest.Approved = 0
+	e.PullRequest.RequestChanged = 0
+	for _, p := range webhook.PullRequest.Participants {
+		if p.Role == "REVIEWER" && p.Approved {
+			e.PullRequest.Approved++
+		}
+
+		if p.Role == "REVIEWER" && p.State == "changes_requested" {
+			e.PullRequest.RequestChanged++
+		}
+	}
+
 	return e, err
 }
 
@@ -216,6 +229,11 @@ type bpWebhookRequest struct {
 				Name string `json:"name"`
 			} `json:"branch"`
 		} `json:"destination"`
+		Participants []struct {
+			Role     string `json:"role"`
+			Approved bool   `json:"approved"`
+			State    string `json:"state"`
+		} `json:"participants"`
 	} `json:"pullrequest"`
 	Comment struct {
 		Id      int    `json:"id"`

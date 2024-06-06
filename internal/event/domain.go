@@ -21,7 +21,8 @@ type PullRequest struct {
 	Id                int
 	SourceBranch      string
 	DestinationBranch string
-	Approved          bool
+	Approved          int
+	RequestChanged    int
 	FilesChanged      []string
 }
 

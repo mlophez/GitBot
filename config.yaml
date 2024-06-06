@@ -12,6 +12,10 @@ security:
     - name: testing
       users:
         - david.gonzalez@logalty.com
+  policy:
+    - repository: https://bitbucket.org/firmapro/kubernetes.git
+      filepattern: ["overlays/test/**", ""]
+      minApproved: 1
   rules:
     - repository: https://bitbucket.org/firmapro/kubernetes.git
       filepattern: ["overlays/test/**", ""]

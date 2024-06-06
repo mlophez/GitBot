@@ -11,6 +11,7 @@ import (
 /*** Event Response ***/
 type Response struct {
 	Success bool
+	Message string
 	Summary []AppStatus
 }
 
@@ -58,6 +59,15 @@ func (s Service) Process(e Event) *Response {
 	} else if len(apps) == 0 {
 		slog.Info("Not apps founds")
 		return nil
+	}
+
+	/* Check if action is permitted */
+	if e.PullRequest.Approved == 0 {
+		return &Response{Success: false, Message: "You need at least one approval from a reviewer."}
+	}
+
+	if e.PullRequest.RequestChanged > 0 {
+		return &Response{Success: false, Message: "One of the reviewers has requested changes."}
 	}
 
 	switch action {
