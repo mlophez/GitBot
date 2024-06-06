@@ -227,5 +227,10 @@ func (s Service) unlockPullRequest(e Event, pr PullRequest, apps []app.Applicati
 		}
 	}
 
+	/* In merge if suscesfully unlock no response */
+	if resp.Success && (e.Type == EventTypeMerged || e.Type == EventTypeDeclined) {
+		return nil
+	}
+
 	return &resp
 }
