@@ -60,17 +60,14 @@ func (b BitbucketProvider) ParseEvent(headers http.Header, body io.ReadCloser) (
 		e.Type = event.EventTypeUnknown
 	}
 
-	// Get Changelog
-	filesChanged, err := b.GetFilesChanged(e.Repository, e.PullRequest.Id)
-	if err != nil {
-		return e, err
-	}
-	e.PullRequest.FilesChanged = filesChanged
-
 	// Approved and Request changeds
 	e.PullRequest.Approved = 0
 	e.PullRequest.RequestChanged = 0
 	for _, p := range webhook.PullRequest.Participants {
+		if p.Role == "REVIEWER" {
+			e.PullRequest.Reviewers++
+		}
+
 		if p.Role == "REVIEWER" && p.Approved {
 			e.PullRequest.Approved++
 		}
@@ -81,6 +78,24 @@ func (b BitbucketProvider) ParseEvent(headers http.Header, body io.ReadCloser) (
 	}
 
 	return e, err
+}
+
+func (b BitbucketProvider) GetData(e event.Event) (event.Event, error) {
+	// Get Changelog
+	filesChanged, err := b.GetFilesChanged(e.Repository, e.PullRequest.Id)
+	if err != nil {
+		return e, err
+	}
+	e.PullRequest.FilesChanged = filesChanged
+
+	// Get commits behind target branch
+	commitsBehind, err := b.CompareBranchCommitTotal(e.Repository, e.PullRequest.DestinationBranch, e.PullRequest.SourceBranch)
+	if err != nil {
+		return e, err
+	}
+	e.PullRequest.CommitsBehind = commitsBehind
+
+	return e, nil
 }
 
 func (b BitbucketProvider) GetFilesChanged(repo string, pullRequestId int) ([]string, error) {
@@ -209,6 +224,43 @@ func (b BitbucketProvider) getSlug(repo string) string {
 	repo = strings.Replace(repo, "https://bitbucket.org/", "", -1)
 	repo = strings.Replace(repo, ".git", "", -1)
 	return repo
+}
+
+func (b BitbucketProvider) CompareBranchCommitTotal(repository string, include string, exclude string) (int, error) {
+	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/commits?include=%s&exclude=%s", b.getSlug(repository), include, exclude)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.Error("Error on response - ", err)
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return 0, fmt.Errorf("Error in send comment to pull request")
+	}
+
+	type Response struct {
+		Values []struct{} `json:"values"`
+	}
+
+	var commits Response
+	err = json.NewDecoder(resp.Body).Decode(&commits)
+	if err != nil {
+		return 0, err
+		//return []string{}, err
+	}
+
+	return len(commits.Values), nil
 }
 
 type bpWebhookRequest struct {

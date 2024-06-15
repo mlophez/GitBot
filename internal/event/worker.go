@@ -35,8 +35,19 @@ func (w *Worker) Start() {
 				continue
 			}
 
+			/* Get Additional data */
+			var e Event
+			for i := 1; i <= 3; i++ {
+				var err error
+				e, err = next.Provider.GetData(next.Event)
+				if err == nil {
+					break
+				}
+				time.Sleep(1 * time.Second)
+			}
+
 			// Process
-			resp := w.service.Process(next.Event)
+			resp := w.service.Process(e)
 			if resp == nil {
 				continue
 			}

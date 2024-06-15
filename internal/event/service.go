@@ -61,17 +61,23 @@ func (s Service) Process(e Event) *Response {
 		return nil
 	}
 
-	/* Check if action is permitted */
-	if e.PullRequest.Approved == 0 {
-		return &Response{Success: false, Message: "You need at least one approval from a reviewer"}
-	}
-
-	if e.PullRequest.RequestChanged > 0 {
-		return &Response{Success: false, Message: "One of the reviewers has requested changes"}
-	}
-
 	switch action {
 	case LOCK_ACTION:
+
+		/* Check if action is permitted */
+		if e.PullRequest.Approved == 0 && e.PullRequest.Reviewers != 0 {
+			return &Response{Success: false, Message: "You need at least one approval from a reviewer"}
+		}
+
+		if e.PullRequest.RequestChanged > 0 {
+			return &Response{Success: false, Message: "One of the reviewers has requested changes"}
+		}
+
+		if e.PullRequest.CommitsBehind > 0 {
+			return &Response{Success: false, Message: fmt.Sprintf(
+				"This pull request is %d commits behind '%s', sync your branch!", e.PullRequest.CommitsBehind, e.PullRequest.DestinationBranch)}
+		}
+
 		return s.lockPullRequest(e.PullRequest, apps)
 	case UNLOCK_ACTION:
 		return s.unlockPullRequest(e, e.PullRequest, apps)

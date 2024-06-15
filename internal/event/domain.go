@@ -21,8 +21,10 @@ type PullRequest struct {
 	Id                int
 	SourceBranch      string
 	DestinationBranch string
+	Reviewers         int
 	Approved          int
 	RequestChanged    int
+	CommitsBehind     int
 	FilesChanged      []string
 }
 
@@ -57,6 +59,7 @@ type Queue interface {
 type Provider interface {
 	//Name() string
 	ParseEvent(headers http.Header, body io.ReadCloser) (Event, error)
+	GetData(Event) (Event, error)
 	WriteComment(repo string, prId int, parentId int, msg string) error
 	//	RespondEvent(e GitEvent, msg string) error
 }
