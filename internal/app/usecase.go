@@ -9,7 +9,7 @@ func filterAppByRepoAndFiles(apps []Application, repo string, files []string) []
 
 	for _, app := range apps {
 		if matchAppByRepoAndFiles(app, repo, files) {
-			result = append(result, app.sanitize())
+			result = append(result, app.Sanitize())
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 
@@ -111,8 +112,9 @@ type ArgoAppResponse struct {
 			Locked        string `json:"bot.gitbot.io/locked"`
 			PullRequestId string `json:"bot.gitbot.io/pull-request"`
 			// ProviderId    string `json:"bot.gitbot.io/provider"`
-			Rollback string `json:"bot.gitbot.io/rollback"`
-			BasePath string `json:"argocd.argoproj.io/manifest-generate-paths"`
+			Rollback    string `json:"bot.gitbot.io/rollback"`
+			BasePath    string `json:"argocd.argoproj.io/manifest-generate-paths"`
+			Environment string `json:"gitbot.io/env"`
 		} `json:"annotations"`
 	} `json:"metadata"`
 	Spec struct {
@@ -152,6 +154,20 @@ func (resp ArgoAppResponse) ConvertToApplication() Application {
 
 	prId, _ := strconv.Atoi(resp.Metadata.Annotations.PullRequestId)
 
+	/* Parse environment of application */
+	var env string
+	if resp.Metadata.Annotations.Environment != "" {
+		env = strings.ToLower(resp.Metadata.Annotations.Environment)
+	} else {
+		clusterName := os.Getenv("CLUSTER_NAME")
+		if clusterName != "" {
+			env = strings.ToLower(clusterName)
+		} else {
+			env = "unknown"
+		}
+	}
+	/* ******************************* */
+
 	return Application{
 		Name:          resp.Metadata.Name,
 		Repository:    resp.Spec.Source.RepoUrl,
@@ -160,6 +176,7 @@ func (resp ArgoAppResponse) ConvertToApplication() Application {
 		Locked:        strings.ToLower(resp.Metadata.Annotations.Locked) == "true",
 		PullRequestId: prId,
 		LastBranch:    resp.Metadata.Annotations.Rollback,
+		Environment:   env,
 	}
 }
 

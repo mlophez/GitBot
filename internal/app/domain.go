@@ -9,9 +9,10 @@ type Application struct {
 	PullRequestId int
 	ProviderId    int
 	LastBranch    string
+	Environment   string
 }
 
-func (app Application) sanitize() Application {
+func (app Application) Sanitize() Application {
 	if app.Locked && app.LastBranch == app.Branch {
 		app.Locked = false
 	}

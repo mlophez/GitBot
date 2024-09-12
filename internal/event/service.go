@@ -45,9 +45,9 @@ func NewService(rules []SecurityRule, appService app.Service) Service {
 func (s Service) Process(e Event) *Response {
 	slog.Info("Processing new event", "type", e.Type)
 
-	/* Get action */
-	action := getActionFromEvent(e)
-	if action == UNKNOWN_ACTION {
+	/* Get action, env is "all" if all environments */
+	action, env := getActionFromEvent(e)
+	if action == UNKNOWN_ACTION || env == nil {
 		return nil
 	}
 
@@ -56,7 +56,10 @@ func (s Service) Process(e Event) *Response {
 	if err != nil {
 		slog.Error("Error at try get apps", "error", err)
 		return nil
-	} else if len(apps) == 0 {
+	}
+	/* Filter by environment */
+	apps = filterByEnv(apps, *env)
+	if len(apps) == 0 {
 		slog.Info("Not apps founds")
 		return nil
 	}
@@ -86,33 +89,41 @@ func (s Service) Process(e Event) *Response {
 	}
 }
 
-func getActionFromEvent(e Event) Action {
+func getActionFromEvent(e Event) (Action, *string) {
 	switch e.Type {
 
 	case EventTypeMerged:
-		return UNLOCK_ACTION
+		return UNLOCK_ACTION, nil
 
 	case EventTypeDeclined:
-		return UNLOCK_ACTION
+		return UNLOCK_ACTION, nil
 
 	case EventTypeCommented:
 		var command string
+		var env string
 
-		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)`).FindStringSubmatch(e.Comment)
-		if len(filter) == 4 {
+		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)(?: (\w+))?`).FindStringSubmatch(e.Comment)
+		if len(filter) > 3 {
 			command = filter[3]
+		}
+
+		/* If #argo deploy environment, if environment not match ignore */
+		if len(filter) > 4 {
+			if filter[4] != "" {
+				env = strings.ToLower(filter[4])
+			}
 		}
 
 		switch strings.ToUpper(command) {
 		case "LOCK", "DEPLOY", "TEST":
-			return LOCK_ACTION
+			return LOCK_ACTION, &env
 
 		case "UNLOCK", "UNDEPLOY", "ROLLBACK":
-			return UNLOCK_ACTION
+			return UNLOCK_ACTION, &env
 		}
 	}
 
-	return UNKNOWN_ACTION
+	return UNKNOWN_ACTION, nil
 }
 
 func (s Service) lockPullRequest(pr PullRequest, apps []app.Application) *Response {
@@ -239,4 +250,17 @@ func (s Service) unlockPullRequest(e Event, pr PullRequest, apps []app.Applicati
 	}
 
 	return &resp
+}
+
+func filterByEnv(apps []app.Application, envFilter string) []app.Application {
+	var result []app.Application
+
+	for _, app := range apps {
+		if app.Environment == envFilter || envFilter == "all" {
+			result = append(result, app.Sanitize())
+		}
+	}
+
+	return result
+
 }
