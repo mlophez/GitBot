@@ -90,17 +90,20 @@ func (s Service) Process(e Event) *Response {
 }
 
 func getActionFromEvent(e Event) (Action, *string) {
+	var env string
+
 	switch e.Type {
 
 	case EventTypeMerged:
-		return UNLOCK_ACTION, nil
+		env = "all"
+		return UNLOCK_ACTION, &env
 
 	case EventTypeDeclined:
-		return UNLOCK_ACTION, nil
+		env = "all"
+		return UNLOCK_ACTION, &env
 
 	case EventTypeCommented:
 		var command string
-		var env string
 
 		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)(?: (\w+))?`).FindStringSubmatch(e.Comment)
 		if len(filter) > 3 {
