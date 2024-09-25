@@ -9,6 +9,7 @@ import (
 	"gitbot/internal/event"
 	"gitbot/internal/event/provider"
 	"gitbot/internal/event/queue"
+	"gitbot/internal/notification"
 
 	"log/slog"
 	"net/http"
@@ -43,6 +44,7 @@ func main() {
 	router := http.NewServeMux()
 	router.HandleFunc("GET /status", status)
 	router.HandleFunc("POST /api/v1/webhook/bitbucket", bitbucketHandler.Handle())
+	router.HandleFunc("POST /api/v1/notification", notification.HandleNotification(c.ClientSet, bitbucket))
 
 	// Starting Http Server
 	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: router}
