@@ -9,13 +9,13 @@ run:
 build-image:
 	export DOCKER_BUILDKIT=1
 	export BUILDAH_LAYERS=true
-	podman build -t docker.io/lgtjpmora/gitbot:dev .
+	podman build -t 234166862235.dkr.ecr.eu-south-2.amazonaws.com/gitops-bot:dev .
 
 run-image:
-	podman run -it --rm --name gitbot --replace docker.io/lgtjpmora/gitbot:dev
+	podman run -it --rm --name gitbot --replace 234166862235.dkr.ecr.eu-south-2.amazonaws.com/gitops-bot:dev
 
 publish-image:
-	podman push docker.io/lgtjpmora/gitbot:dev
+	podman push 234166862235.dkr.ecr.eu-south-2.amazonaws.com/gitops-bot:dev
 
 
 get-token:
