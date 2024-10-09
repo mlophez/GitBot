@@ -112,9 +112,10 @@ type ArgoAppResponse struct {
 			Locked        string `json:"bot.gitbot.io/locked"`
 			PullRequestId string `json:"bot.gitbot.io/pull-request"`
 			// ProviderId    string `json:"bot.gitbot.io/provider"`
-			Rollback    string `json:"bot.gitbot.io/rollback"`
-			BasePath    string `json:"argocd.argoproj.io/manifest-generate-paths"`
-			Environment string `json:"gitbot.io/env"`
+			Rollback         string `json:"bot.gitbot.io/rollback"`
+			BasePath         string `json:"argocd.argoproj.io/manifest-generate-paths"`
+			Environment      string `json:"gitbot.io/env"`
+			ContainOtherApps string `json:"gitbot.io/contain-other-apps"`
 		} `json:"annotations"`
 	} `json:"metadata"`
 	Spec struct {
@@ -177,6 +178,7 @@ func (resp ArgoAppResponse) ConvertToApplication() Application {
 		PullRequestId: prId,
 		LastBranch:    resp.Metadata.Annotations.Rollback,
 		Environment:   env,
+		ContainOther:  strings.ToLower(resp.Metadata.Annotations.ContainOtherApps) == "true",
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"time"
 )
 
 /*** Event Response ***/
@@ -81,7 +82,13 @@ func (s Service) Process(e Event) *Response {
 				"This pull request is %d commits behind '%s', sync your branch!", e.PullRequest.CommitsBehind, e.PullRequest.DestinationBranch)}
 		}
 
-		return s.lockPullRequest(e.PullRequest, apps)
+		// Double lock for apps of apps
+		re := s.lockPullRequest(e.PullRequest, apps)
+		if IsAnyContainApps(apps) {
+			time.Sleep(15 * time.Second)
+			return s.lockPullRequest(e.PullRequest, apps)
+		}
+		return re
 	case UNLOCK_ACTION:
 		return s.unlockPullRequest(e, e.PullRequest, apps)
 	default:
@@ -266,4 +273,13 @@ func filterByEnv(apps []app.Application, envFilter string) []app.Application {
 
 	return result
 
+}
+
+func IsAnyContainApps(apps []app.Application) bool {
+	for _, a := range apps {
+		if a.ContainOther {
+			return true
+		}
+	}
+	return false
 }

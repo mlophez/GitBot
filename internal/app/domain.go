@@ -10,6 +10,7 @@ type Application struct {
 	ProviderId    int
 	LastBranch    string
 	Environment   string
+	ContainOther  bool
 }
 
 func (app Application) Sanitize() Application {
