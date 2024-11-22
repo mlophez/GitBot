@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
-	"time"
 )
 
 /*** Event Response ***/
@@ -43,26 +42,28 @@ func NewService(rules []SecurityRule, appService app.Service) Service {
 	}
 }
 
-func (s Service) Process(e Event) *Response {
+func (s Service) Process(e Event) (*Response, bool) {
 	slog.Info("Processing new event", "type", e.Type)
+
+	retry := false
 
 	/* Get action, env is "all" if all environments */
 	action, env := getActionFromEvent(e)
 	if action == UNKNOWN_ACTION || env == nil {
-		return nil
+		return nil, retry
 	}
 
 	/* Get apps from cluster */
 	apps, err := s.appService.FindAppsByRepoAndFiles(e.Repository, e.PullRequest.FilesChanged)
 	if err != nil {
 		slog.Error("Error at try get apps", "error", err)
-		return nil
+		return nil, retry
 	}
 	/* Filter by environment */
 	apps = filterByEnv(apps, *env)
 	if len(apps) == 0 {
 		slog.Info("Not apps founds")
-		return nil
+		return nil, retry
 	}
 
 	switch action {
@@ -70,29 +71,29 @@ func (s Service) Process(e Event) *Response {
 
 		/* Check if action is permitted */
 		if e.PullRequest.Approved == 0 && e.PullRequest.Reviewers != 0 {
-			return &Response{Success: false, Message: "You need at least one approval from a reviewer"}
+			return &Response{Success: false, Message: "You need at least one approval from a reviewer"}, retry
 		}
 
 		if e.PullRequest.RequestChanged > 0 {
-			return &Response{Success: false, Message: "One of the reviewers has requested changes"}
+			return &Response{Success: false, Message: "One of the reviewers has requested changes"}, retry
 		}
 
 		if e.PullRequest.CommitsBehind > 0 {
 			return &Response{Success: false, Message: fmt.Sprintf(
-				"This pull request is %d commits behind '%s', sync your branch!", e.PullRequest.CommitsBehind, e.PullRequest.DestinationBranch)}
+				"This pull request is %d commits behind '%s', sync your branch!", e.PullRequest.CommitsBehind, e.PullRequest.DestinationBranch)}, retry
 		}
 
-		// Double lock for apps of apps
 		re := s.lockPullRequest(e.PullRequest, apps)
-		if IsAnyContainApps(apps) {
-			time.Sleep(15 * time.Second)
-			return s.lockPullRequest(e.PullRequest, apps)
+		// Double lock for apps of apps
+		retry = IsAnyContainApps(apps)
+		if retry {
+			slog.Info("Some app has apps, retrying")
 		}
-		return re
+		return re, retry
 	case UNLOCK_ACTION:
-		return s.unlockPullRequest(e, e.PullRequest, apps)
+		return s.unlockPullRequest(e, e.PullRequest, apps), retry
 	default:
-		return nil
+		return nil, retry
 	}
 }
 

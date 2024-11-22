@@ -24,6 +24,7 @@ func NewWorker(q Queue, s Service, clusterName string) *Worker {
 	}
 }
 
+// Impure
 func (w *Worker) Start() {
 	for {
 		select {
@@ -47,7 +48,12 @@ func (w *Worker) Start() {
 			}
 
 			// Process
-			resp := w.service.Process(e)
+			resp, retry := w.service.Process(e)
+			// Double lock for apps of apps
+			if resp != nil && retry {
+				time.Sleep(30 * time.Second)
+				w.queue.Enqueue(*next)
+			}
 			if resp == nil {
 				continue
 			}
