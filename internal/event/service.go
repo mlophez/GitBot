@@ -241,6 +241,15 @@ func (s Service) unlockPullRequest(e Event, pr PullRequest, apps []app.Applicati
 	//	return &resp
 	//}
 
+	// filter apps and only unlock the ones locked by this PR. Make new slice filtering by pr id
+	newApps := make([]app.Application, 0)
+	for _, a := range apps {
+		if a.Locked && a.PullRequestId == pr.Id {
+			newApps = append(newApps, a)
+		}
+	}
+	apps = newApps
+
 	for i, a := range apps {
 		if a.Locked {
 			err := s.appService.UnlockApp(a)
