@@ -84,11 +84,11 @@ func (s Service) Process(e Event) (*Response, bool) {
 		}
 
 		re := s.lockPullRequest(e.PullRequest, apps)
-		// Double lock for apps of apps
-		retry = IsAnyContainApps(apps)
-		if retry {
-			slog.Info("Some app has apps, retrying")
-		}
+		// TODO: Double lock for apps of apps, check if already blocked, caution loop infinity
+		// retry = IsAnyContainApps(apps)
+		// if retry {
+		// 	slog.Info("Some app has apps, retrying")
+		// }
 		return re, retry
 	case UNLOCK_ACTION:
 		return s.unlockPullRequest(e, e.PullRequest, apps), retry
