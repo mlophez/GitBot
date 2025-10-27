@@ -1,0 +1,9 @@
+# GIT BOT DESIGN
+
+PULLREQUESTS (entity)
+
+EVENTS (entity)
+
+CLUSTERS (entity)
+
+APPLICATIONS (entity)

@@ -2,7 +2,7 @@ FROM golang:1.22.2-alpine as builder
 RUN apk --no-cache add ca-certificates
 WORKDIR /src
 COPY . .
-RUN cd ./cmd/gitbot && GOOS=linux go build -o /gitbot
+RUN cd ./cmd/server && GOOS=linux go build -o /gitbot
 
 FROM scratch
 WORKDIR /app
