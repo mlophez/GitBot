@@ -38,6 +38,26 @@ func (s Service) FindAppsByRepoAndFiles(repo string, files []string) ([]Applicat
 	return apps, nil
 }
 
+func (s Service) FindAppsByPrID(prID int) ([]Application, error) {
+	var result []Application
+
+	ctx := context.TODO()
+
+	apps, err := s.repository.List(ctx)
+	if err != nil {
+		slog.Error("Error at get all apps from kubernetes", "module", "app", "function", "FindAppsByRepoAndFiles", "error", err)
+		return nil, err
+	}
+
+	for _, app := range apps {
+		if app.PullRequestId == prID {
+			result = append(result, app.Sanitize())
+		}
+	}
+
+	return result, nil
+}
+
 func (s Service) LockApp(app Application, targetBranch string, prID int) error {
 	if app.Locked {
 		return fmt.Errorf("Application %s already locked", app.Name)

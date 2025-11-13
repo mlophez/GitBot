@@ -53,22 +53,8 @@ func (s Service) Process(e Event) (*Response, bool) {
 		return nil, retry
 	}
 
-	/* Get apps from cluster */
-	apps, err := s.appService.FindAppsByRepoAndFiles(e.Repository, e.PullRequest.FilesChanged)
-	if err != nil {
-		slog.Error("Error at try get apps", "error", err)
-		return nil, retry
-	}
-	/* Filter by environment */
-	apps = filterByEnv(apps, *env)
-	if len(apps) == 0 {
-		slog.Info("Not apps founds")
-		return nil, retry
-	}
-
 	switch action {
 	case LOCK_ACTION:
-
 		/* Check if action is permitted */
 		if e.PullRequest.Approved == 0 && e.PullRequest.Reviewers != 0 {
 			return &Response{Success: false, Message: "You need at least one approval from a reviewer"}, retry
@@ -83,6 +69,20 @@ func (s Service) Process(e Event) (*Response, bool) {
 				"This pull request is %d commits behind '%s', sync your branch!", e.PullRequest.CommitsBehind, e.PullRequest.DestinationBranch)}, retry
 		}
 
+		/* Get apps from cluster */
+		apps, err := s.appService.FindAppsByRepoAndFiles(e.Repository, e.PullRequest.FilesChanged)
+		if err != nil {
+			slog.Error("Error at try get apps", "error", err)
+			return nil, retry
+		}
+
+		/* Filter by environment */
+		apps = filterByEnv(apps, *env)
+		if len(apps) == 0 {
+			slog.Info("Not apps founds")
+			return nil, retry
+		}
+
 		re := s.lockPullRequest(e.PullRequest, apps)
 		// TODO: Double lock for apps of apps, check if already blocked, caution loop infinity
 		// retry = IsAnyContainApps(apps)
@@ -91,6 +91,20 @@ func (s Service) Process(e Event) (*Response, bool) {
 		// }
 		return re, retry
 	case UNLOCK_ACTION:
+		/* Get apps from cluster */
+		apps, err := s.appService.FindAppsByPrID(e.PullRequest.Id)
+		if err != nil {
+			slog.Error("Error at try get apps", "error", err)
+			return nil, retry
+		}
+
+		/* Filter by environment */
+		apps = filterByEnv(apps, *env)
+		if len(apps) == 0 {
+			slog.Info("Not apps founds")
+			return nil, retry
+		}
+
 		return s.unlockPullRequest(e, e.PullRequest, apps), retry
 	default:
 		return nil, retry
