@@ -48,7 +48,7 @@ func (s Service) Process(e Event) (*Response, bool) {
 	retry := false
 
 	/* Get action, env is "all" if all environments */
-	action, env := getActionFromEvent(e)
+	action, env, appname := getActionFromEvent(e)
 	if action == UNKNOWN_ACTION || env == nil {
 		return nil, retry
 	}
@@ -83,6 +83,14 @@ func (s Service) Process(e Event) (*Response, bool) {
 			return nil, retry
 		}
 
+		/* Filter by appname */
+		apps = filterByAppName(apps, *appname)
+		if len(apps) == 0 {
+			slog.Info("Not apps founds after appname filter")
+			return nil, retry
+		}
+
+		/* Lock apps */
 		re := s.lockPullRequest(e.PullRequest, apps)
 		// TODO: Double lock for apps of apps, check if already blocked, caution loop infinity
 		// retry = IsAnyContainApps(apps)
@@ -105,29 +113,40 @@ func (s Service) Process(e Event) (*Response, bool) {
 			return nil, retry
 		}
 
+		/* Filter by appname */
+		apps = filterByAppName(apps, *appname)
+		if len(apps) == 0 {
+			slog.Info("Not apps founds after appname filter")
+			return nil, retry
+		}
+
+		/* Unlock apps */
 		return s.unlockPullRequest(e, e.PullRequest, apps), retry
 	default:
 		return nil, retry
 	}
 }
 
-func getActionFromEvent(e Event) (Action, *string) {
+// return Action, env, app
+func getActionFromEvent(e Event) (Action, *string, *string) {
 	var env string
+	var appname string
+
+	env = "all"
+	appname = "all"
 
 	switch e.Type {
 
 	case EventTypeMerged:
-		env = "all"
-		return UNLOCK_ACTION, &env
+		return UNLOCK_ACTION, &env, &appname
 
 	case EventTypeDeclined:
-		env = "all"
-		return UNLOCK_ACTION, &env
+		return UNLOCK_ACTION, &env, &appname
 
 	case EventTypeCommented:
 		var command string
 
-		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)(?: (\w+))?`).FindStringSubmatch(e.Comment)
+		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)(?: (\w+))?(?: (\w+))?`).FindStringSubmatch(e.Comment)
 		if len(filter) > 3 {
 			command = filter[3]
 		}
@@ -139,16 +158,23 @@ func getActionFromEvent(e Event) (Action, *string) {
 			}
 		}
 
+		/* If #argo deploy environment appname, if appname not match ignore */
+		if len(filter) > 5 {
+			if filter[5] != "" {
+				appname = strings.ToLower(filter[5])
+			}
+		}
+
 		switch strings.ToUpper(command) {
 		case "LOCK", "DEPLOY", "TEST":
-			return LOCK_ACTION, &env
+			return LOCK_ACTION, &env, &appname
 
 		case "UNLOCK", "UNDEPLOY", "ROLLBACK":
-			return UNLOCK_ACTION, &env
+			return UNLOCK_ACTION, &env, &appname
 		}
 	}
 
-	return UNKNOWN_ACTION, nil
+	return UNKNOWN_ACTION, nil, nil
 }
 
 func (s Service) lockPullRequest(pr PullRequest, apps []app.Application) *Response {
@@ -297,6 +323,18 @@ func filterByEnv(apps []app.Application, envFilter string) []app.Application {
 
 	return result
 
+}
+
+func filterByAppName(apps []app.Application, appnameFilter string) []app.Application {
+	var result []app.Application
+
+	for _, app := range apps {
+		if app.Name == appnameFilter || appnameFilter == "all" {
+			result = append(result, app.Sanitize())
+		}
+	}
+
+	return result
 }
 
 func IsAnyContainApps(apps []app.Application) bool {
