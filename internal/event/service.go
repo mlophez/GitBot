@@ -146,7 +146,7 @@ func getActionFromEvent(e Event) (Action, *string, *string) {
 	case EventTypeCommented:
 		var command string
 
-		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)(?: (\w+))?(?: (\w+))?`).FindStringSubmatch(e.Comment)
+		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)(?: (\w+))?(?: ([- \w]+))?`).FindStringSubmatch(e.Comment)
 		if len(filter) > 3 {
 			command = filter[3]
 		}
@@ -316,7 +316,7 @@ func filterByEnv(apps []app.Application, envFilter string) []app.Application {
 	var result []app.Application
 
 	for _, app := range apps {
-		if app.Environment == envFilter || envFilter == "all" {
+		if strings.ToLower(app.Environment) == strings.ToLower(envFilter) || envFilter == "all" {
 			result = append(result, app.Sanitize())
 		}
 	}
@@ -329,7 +329,7 @@ func filterByAppName(apps []app.Application, appnameFilter string) []app.Applica
 	var result []app.Application
 
 	for _, app := range apps {
-		if app.Name == appnameFilter || appnameFilter == "all" {
+		if strings.ToLower(app.Name) == strings.ToLower(appnameFilter) || appnameFilter == "all" {
 			result = append(result, app.Sanitize())
 		}
 	}
