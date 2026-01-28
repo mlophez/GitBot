@@ -3,6 +3,10 @@ options:
   docker: true
   max-time: 10
   size: 2x
+  runtime:
+    cloud:
+      version: 3
+
 
 definitions:
   services:
@@ -25,7 +29,7 @@ pipelines:
         services: ["docker"]
         script:
         - |
-            # export DOCKER_BUILDKIT=1
+            export DOCKER_BUILDKIT=1
             export REPOSITORY="234166862235.dkr.ecr.eu-south-2.amazonaws.com"
             export IMAGE="gitops-bot"
             export TAG="dev"
@@ -34,6 +38,5 @@ pipelines:
             export AWS_SECRET_ACCESS_KEY=${BITBUCKET_AWS_SECRET_ACCESS_KEY}
             aws ecr get-login-password --region eu-south-2 | docker login --username AWS --password-stdin ${REPOSITORY}
         - |
-            export DOCKER_BUILDKIT=0
             docker build --platform linux/amd64  -f Containerfile -t ${REPOSITORY}/${IMAGE}:${TAG} .
             docker push ${REPOSITORY}/${IMAGE}:${TAG}
