@@ -55,20 +55,6 @@ func (s Service) Process(e Event) (*Response, bool) {
 
 	switch action {
 	case LOCK_ACTION:
-		/* Check if action is permitted */
-		if e.PullRequest.Approved == 0 && e.PullRequest.Reviewers != 0 {
-			return &Response{Success: false, Message: "You need at least one approval from a reviewer"}, retry
-		}
-
-		if e.PullRequest.RequestChanged > 0 {
-			return &Response{Success: false, Message: "One of the reviewers has requested changes"}, retry
-		}
-
-		if e.PullRequest.CommitsBehind > 0 {
-			return &Response{Success: false, Message: fmt.Sprintf(
-				"This pull request is %d commits behind '%s', sync your branch!", e.PullRequest.CommitsBehind, e.PullRequest.DestinationBranch)}, retry
-		}
-
 		/* Get apps from cluster */
 		apps, err := s.appService.FindAppsByRepoAndFiles(e.Repository, e.PullRequest.FilesChanged)
 		if err != nil {
@@ -88,6 +74,20 @@ func (s Service) Process(e Event) (*Response, bool) {
 		if len(apps) == 0 {
 			slog.Info("Not apps founds after appname filter")
 			return nil, retry
+		}
+
+		/* Check if action is permitted */
+		if e.PullRequest.Approved == 0 && e.PullRequest.Reviewers != 0 {
+			return &Response{Success: false, Message: "You need at least one approval from a reviewer"}, retry
+		}
+
+		if e.PullRequest.RequestChanged > 0 {
+			return &Response{Success: false, Message: "One of the reviewers has requested changes"}, retry
+		}
+
+		if e.PullRequest.CommitsBehind > 0 {
+			return &Response{Success: false, Message: fmt.Sprintf(
+				"This pull request is %d commits behind '%s', sync your branch!", e.PullRequest.CommitsBehind, e.PullRequest.DestinationBranch)}, retry
 		}
 
 		/* Lock apps */
