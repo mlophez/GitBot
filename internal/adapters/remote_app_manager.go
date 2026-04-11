@@ -26,12 +26,13 @@ type RemoteAppManager struct {
 // When insecureSkipTLSVerify is true the HTTP client skips certificate validation —
 // use only in non-production environments.
 func NewRemoteAppManager(baseURL, clusterName string, insecureSkipTLSVerify bool) types.AppManager {
-	transport := http.DefaultTransport
+	// Clone DefaultTransport so all defaults (DialContext, timeouts, keep-alives)
+	// are preserved and only TLS config is overridden when needed.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if insecureSkipTLSVerify {
-		transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // intentional, user-configured
-		}
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // intentional, user-configured
 	}
+
 	return &RemoteAppManager{
 		baseURL:     baseURL,
 		clusterName: clusterName,
@@ -57,10 +58,22 @@ type remoteLockRequest struct {
 	PullRequestId int    `json:"pull_request_id"`
 }
 
+// newRequest builds an HTTP request with an explicit Host header derived from
+// the base URL. This prevents the Host header from being empty when the request
+// passes through a reverse proxy (e.g. HAProxy) that requires it for routing.
+func (r *RemoteAppManager) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return http.NewRequest(method, url, body)
+}
+
 // List fetches all applications from the remote agent and returns them
 // with the Cluster field set to the configured cluster name.
 func (r *RemoteAppManager) List() ([]types.Application, error) {
-	resp, err := r.client.Get(r.baseURL + "/api/v1/apps")
+	req, err := r.newRequest(http.MethodGet, r.baseURL+"/api/v1/apps", nil)
+	if err != nil {
+		return nil, fmt.Errorf("remote agent %q: failed to build request: %w", r.clusterName, err)
+	}
+
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
 	}
@@ -94,13 +107,19 @@ func (r *RemoteAppManager) List() ([]types.Application, error) {
 
 // Lock tells the remote agent to lock the application to targetBranch for prID.
 func (r *RemoteAppManager) Lock(app types.Application, targetBranch string, prID int) error {
-	body, err := json.Marshal(remoteLockRequest{Branch: targetBranch, PullRequestId: prID})
+	payload, err := json.Marshal(remoteLockRequest{Branch: targetBranch, PullRequestId: prID})
 	if err != nil {
 		return err
 	}
 
 	url := fmt.Sprintf("%s/api/v1/apps/%s/lock", r.baseURL, app.Name)
-	resp, err := r.client.Post(url, "application/json", bytes.NewReader(body))
+	req, err := r.newRequest(http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("remote agent %q: failed to build request: %w", r.clusterName, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
 	}
@@ -116,7 +135,12 @@ func (r *RemoteAppManager) Lock(app types.Application, targetBranch string, prID
 // Unlock tells the remote agent to unlock the application.
 func (r *RemoteAppManager) Unlock(app types.Application) error {
 	url := fmt.Sprintf("%s/api/v1/apps/%s/unlock", r.baseURL, app.Name)
-	resp, err := r.client.Post(url, "application/json", nil)
+	req, err := r.newRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return fmt.Errorf("remote agent %q: failed to build request: %w", r.clusterName, err)
+	}
+
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
 	}
