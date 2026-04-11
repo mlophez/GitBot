@@ -1,3 +1,8 @@
+// Package internal contains the use cases (imperative shell) for kubeops-agent.
+// Each file implements one use case and is responsible for:
+//   - Receiving injected dependencies via types.AppManager
+//   - Orchestrating I/O calls and pure domain logic
+//   - Defining the HTTP request/response contract for its endpoint
 package internal
 
 import (
@@ -7,6 +12,9 @@ import (
 	"gitbot/internal/types"
 )
 
+// AppResponse is the HTTP response representation of an ArgoCD application.
+// It exposes only the fields relevant to API consumers, hiding internal
+// domain details such as Paths, ProviderId or ContainOther.
 type AppResponse struct {
 	Name          string `json:"name"`
 	Repository    string `json:"repository"`
@@ -16,6 +24,7 @@ type AppResponse struct {
 	Environment   string `json:"environment"`
 }
 
+// toAppResponse converts a domain Application into its HTTP response form.
 func toAppResponse(app types.Application) AppResponse {
 	return AppResponse{
 		Name:          app.Name,
@@ -27,9 +36,11 @@ func toAppResponse(app types.Application) AppResponse {
 	}
 }
 
-func ListApps(getApps func() ([]types.Application, error)) http.HandlerFunc {
+// ListApps handles GET /api/v1/apps.
+// Returns the list of all ArgoCD applications currently tracked in the cluster.
+func ListApps(manager types.AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		apps, err := getApps()
+		apps, err := manager.List()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

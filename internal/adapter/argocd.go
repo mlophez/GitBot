@@ -19,79 +19,78 @@ const (
 	fieldManager  = "gitbot"
 )
 
-func ListApps(cs *kubernetes.Clientset) func() ([]types.Application, error) {
-	return func() ([]types.Application, error) {
-		data, err := cs.RESTClient().Get().
-			AbsPath("/apis/argoproj.io/v1alpha1/applications").
-			DoRaw(context.Background())
-		if err != nil {
-			return nil, err
-		}
-
-		var list argoAppList
-		if err := json.Unmarshal(data, &list); err != nil {
-			return nil, err
-		}
-
-		apps := make([]types.Application, 0, len(list.Items))
-		for _, item := range list.Items {
-			apps = append(apps, toApplication(item))
-		}
-		return apps, nil
-	}
+type ArgoAppManager struct {
+	clientset *kubernetes.Clientset
 }
 
-func GetApp(cs *kubernetes.Clientset) func(name string) (types.Application, error) {
-	listApps := ListApps(cs)
-	return func(name string) (types.Application, error) {
-		apps, err := listApps()
-		if err != nil {
-			return types.Application{}, err
-		}
-		for _, a := range apps {
-			if a.Name == name {
-				return a, nil
-			}
-		}
-		return types.Application{}, fmt.Errorf("app %q not found", name)
-	}
+func NewArgoAppManager(cs *kubernetes.Clientset) types.AppManager {
+	return &ArgoAppManager{clientset: cs}
 }
 
-func UpdateApp(cs *kubernetes.Clientset) func(types.Application) error {
-	return func(app types.Application) error {
-		body, err := json.Marshal(toRequest(app))
-		if err != nil {
-			return err
-		}
-		_, err = cs.RESTClient().Patch(ktypes.MergePatchType).
-			SetHeader("User-Agent", fieldManager).
-			Body(body).
-			AbsPath("/apis/argoproj.io/v1alpha1").
-			Namespace(argoNamespace).
-			Resource("applications").
-			Name(app.Name).
-			DoRaw(context.Background())
+func (a *ArgoAppManager) List() ([]types.Application, error) {
+	data, err := a.clientset.RESTClient().Get().
+		AbsPath("/apis/argoproj.io/v1alpha1/applications").
+		DoRaw(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	var list argoAppList
+	if err := json.Unmarshal(data, &list); err != nil {
+		return nil, err
+	}
+
+	apps := make([]types.Application, 0, len(list.Items))
+	for _, item := range list.Items {
+		apps = append(apps, toApplication(item))
+	}
+	return apps, nil
+}
+
+func (a *ArgoAppManager) Lock(app types.Application, targetBranch string, prID int) error {
+	locked := app.Lock(targetBranch, prID)
+	return a.update(locked)
+}
+
+func (a *ArgoAppManager) Unlock(app types.Application) error {
+	unlocked := app.Unlock()
+	if err := a.update(unlocked); err != nil {
 		return err
 	}
+	return a.clean(app.Name)
 }
 
-func CleanApp(cs *kubernetes.Clientset) func(name string) error {
-	return func(name string) error {
-		jsonPatch := []byte(`[
-			{ "op": "remove", "path": "/metadata/annotations/bot.gitbot.io~1locked" },
-			{ "op": "remove", "path": "/metadata/annotations/bot.gitbot.io~1pull-request" },
-			{ "op": "remove", "path": "/metadata/annotations/bot.gitbot.io~1rollback" }
-		]`)
-		_, err := cs.RESTClient().Patch(ktypes.JSONPatchType).
-			SetHeader("User-Agent", fieldManager).
-			Body(jsonPatch).
-			AbsPath("/apis/argoproj.io/v1alpha1").
-			Namespace(argoNamespace).
-			Resource("applications").
-			Name(name).
-			DoRaw(context.Background())
+func (a *ArgoAppManager) update(app types.Application) error {
+	body, err := json.Marshal(toRequest(app))
+	if err != nil {
 		return err
 	}
+	_, err = a.clientset.RESTClient().Patch(ktypes.MergePatchType).
+		SetHeader("User-Agent", fieldManager).
+		Body(body).
+		AbsPath("/apis/argoproj.io/v1alpha1").
+		Namespace(argoNamespace).
+		Resource("applications").
+		Name(app.Name).
+		DoRaw(context.Background())
+	return err
+}
+
+func (a *ArgoAppManager) clean(name string) error {
+	jsonPatch := []byte(`[
+		{ "op": "remove", "path": "/metadata/annotations/bot.gitbot.io~1locked" },
+		{ "op": "remove", "path": "/metadata/annotations/bot.gitbot.io~1pull-request" },
+		{ "op": "remove", "path": "/metadata/annotations/bot.gitbot.io~1rollback" }
+	]`)
+	_, err := a.clientset.RESTClient().Patch(ktypes.JSONPatchType).
+		SetHeader("User-Agent", fieldManager).
+		Body(jsonPatch).
+		AbsPath("/apis/argoproj.io/v1alpha1").
+		Namespace(argoNamespace).
+		Resource("applications").
+		Name(name).
+		DoRaw(context.Background())
+	return err
 }
 
 // ── Kubernetes JSON types ─────────────────────────────────────────────────
@@ -170,4 +169,25 @@ func toRequest(app types.Application) argoAppPatch {
 	}
 	p.Spec.Source.TargetRevision = app.Branch
 	return p
+}
+
+func NewListApps(cs *kubernetes.Clientset) func() ([]types.Application, error) {
+	m := &ArgoAppManager{clientset: cs}
+	return m.List
+}
+
+func GetApp(cs *kubernetes.Clientset) func(name string) (types.Application, error) {
+	m := &ArgoAppManager{clientset: cs}
+	return func(name string) (types.Application, error) {
+		apps, err := m.List()
+		if err != nil {
+			return types.Application{}, err
+		}
+		for _, a := range apps {
+			if a.Name == name {
+				return a, nil
+			}
+		}
+		return types.Application{}, fmt.Errorf("app %q not found", name)
+	}
 }

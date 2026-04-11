@@ -2,6 +2,23 @@
 
 A webhook bot for Bitbucket and GitHub that listens for pull request events and manages ArgoCD/FluxCD app deployments. When a PR is opened or a user comments a command, the bot points the ArgoCD app to the PR branch so changes can be tested before merging. It also blocks (locks) the PR to prevent merges until unlocked.
 
+## Documentation Requirements
+
+All new code must be documented. Follow these rules without exception:
+
+- **Package comment** — every package must have a comment on the `package` declaration explaining its role in the architecture and what it contains. Place it in the most representative file of the package.
+- **Exported functions and types** — every exported symbol must have a Go doc comment starting with the symbol name. Include: what it does, what it returns, and any notable HTTP status codes or error conditions for handlers.
+- **Inline comments** — add comments only where logic is non-obvious. Do not comment self-evident code.
+- **Use case files** — each `*_v1.go` file must document: the HTTP method + path it handles, preconditions that return 4xx, and what the success response contains.
+
+Example for a use case:
+```go
+// LockApp handles POST /api/v1/apps/{id}/lock.
+// Points the ArgoCD app to the given branch and marks it as locked by the PR.
+// Returns 404 if the app does not exist, 409 if it is already locked.
+func LockApp(manager types.AppManager) http.HandlerFunc {
+```
+
 ## Architecture: Pure Core / Imperative Shell
 
 The codebase follows the **Pure Core / Imperative Shell** pattern:
@@ -18,8 +35,20 @@ cmd/
   server/main.go      # HTTP server entrypoint. Wires all dependencies.
   repair/main.go      # Utility to reconcile app state (in progress).
 
-internal/
-  app/                # Application domain (ArgoCD apps)
+internal/             # Use cases (imperative shell) — package "internal"
+                      # One file per use case, named {domain}_{action}_{version}.go
+  app_list_v1.go      # GET  /api/v1/apps            — list all ArgoCD apps
+  app_lock_v1.go      # POST /api/v1/apps/{id}/lock   — lock an app to a PR branch
+  app_unlock_v1.go    # POST /api/v1/apps/{id}/unlock — unlock and restore branch
+
+  types/              # Pure domain — no external dependencies, no I/O
+    application.go    # Application type + methods: Lock(), Unlock(), Sanitize()
+    application_manager.go  # AppManager interface: List, Lock, Unlock
+
+  adapter/            # Infrastructure implementations of types interfaces
+    argocd.go         # ArgoAppManager: implements AppManager against Kubernetes API
+
+  app/                # Legacy: Application domain (ArgoCD apps) — to be migrated
     domain.go         # Application struct
     usecase.go        # Pure functions: lockApp, unlockApp, filterAppByRepoAndFiles
     service.go        # Service: orchestrates pure fns + repository calls

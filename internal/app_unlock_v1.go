@@ -7,17 +7,23 @@ import (
 	"gitbot/internal/types"
 )
 
-func UnlockApp(
-	getApp    func(name string) (types.Application, error),
-	updateApp func(types.Application) error,
-	cleanApp  func(name string) error,
-) http.HandlerFunc {
+// UnlockApp handles POST /api/v1/apps/{id}/unlock.
+// Restores the ArgoCD app to the branch it was pointing to before the lock,
+// removes the lock annotations, and marks the app as unlocked.
+// Returns 404 if the app does not exist, 409 if it is not currently locked.
+func UnlockApp(manager types.AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 
-		app, err := getApp(id)
+		apps, err := manager.List()
 		if err != nil {
-			http.Error(w, "app not found", http.StatusNotFound)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		app, err := findByName(apps, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 
@@ -26,20 +32,12 @@ func UnlockApp(
 			return
 		}
 
-		// pure domain logic
-		unlocked := app.Unlock()
-
-		if err := updateApp(unlocked); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if err := cleanApp(id); err != nil {
+		if err := manager.Unlock(app); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(toAppResponse(unlocked))
+		json.NewEncoder(w).Encode(toAppResponse(app.Unlock()))
 	}
 }
