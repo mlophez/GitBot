@@ -2,6 +2,7 @@ package internal
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"gitbot/internal/types"
@@ -15,28 +16,35 @@ func UnlockApp(manager types.AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 
+		slog.Info("UnlockApp request received", "app", id)
+
 		apps, err := manager.List()
 		if err != nil {
+			slog.Error("UnlockApp failed to fetch apps", "app", id, "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		app, err := findByName(apps, id)
 		if err != nil {
+			slog.Warn("UnlockApp app not found", "app", id)
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 
 		if !app.Locked {
+			slog.Warn("UnlockApp app is not locked", "app", id)
 			http.Error(w, "app is not locked", http.StatusConflict)
 			return
 		}
 
 		if err := manager.Unlock(app); err != nil {
+			slog.Error("UnlockApp failed to unlock app", "app", id, "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		slog.Info("UnlockApp app unlocked successfully", "app", id, "restored_branch", app.LastBranch)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(toAppResponse(app.Unlock()))
 	}

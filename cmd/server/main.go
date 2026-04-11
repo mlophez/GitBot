@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"gitbot/internal/adapter"
 	"gitbot/internal/app"
@@ -47,7 +46,7 @@ func main() {
 
 	/* Routes */
 	router := http.NewServeMux()
-	router.HandleFunc("GET /status", status)
+	router.HandleFunc("GET /status", internal.Status)
 	router.HandleFunc("POST /api/v1/webhook/bitbucket", bitbucketHandler.Handle())
 	router.HandleFunc("POST /api/v1/notification", notification.HandleNotification(c.ClientSet, bitbucket))
 	router.HandleFunc("GET /api/v1/apps", internal.ListApps(appManager))
@@ -93,18 +92,3 @@ func main() {
 	os.Exit(0)
 }
 
-func status(w http.ResponseWriter, r *http.Request) {
-	response := map[string]string{"status": "OK"}
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(jsonResponse)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
