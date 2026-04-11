@@ -7,6 +7,7 @@ import (
 	"gitbot/internal/app"
 	"gitbot/internal/config"
 	"gitbot/internal"
+	"gitbot/internal/server"
 	"gitbot/internal/event"
 	"gitbot/internal/event/provider"
 	"gitbot/internal/event/queue"
@@ -54,7 +55,7 @@ func main() {
 	router.HandleFunc("POST /api/v1/apps/{id}/unlock", internal.UnlockApp(appManager))
 
 	// Starting Http Server
-	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: router}
+	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: server.RequestID(router)}
 	go func() {
 		slog.Info("Starting server in port :" + c.HttpPort)
 		err := srv.ListenAndServe()

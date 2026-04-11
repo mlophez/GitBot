@@ -4,20 +4,53 @@ A webhook bot for Bitbucket and GitHub that listens for pull request events and 
 
 ## Documentation Requirements
 
-All new code must be documented. Follow these rules without exception:
+**All generated Go code must include documentation. No exceptions.**
 
-- **Package comment** — every package must have a comment on the `package` declaration explaining its role in the architecture and what it contains. Place it in the most representative file of the package.
-- **Exported functions and types** — every exported symbol must have a Go doc comment starting with the symbol name. Include: what it does, what it returns, and any notable HTTP status codes or error conditions for handlers.
-- **Inline comments** — add comments only where logic is non-obvious. Do not comment self-evident code.
-- **Use case files** — each `*_v1.go` file must document: the HTTP method + path it handles, preconditions that return 4xx, and what the success response contains.
+### Package comments
+Every package must have a comment on the `package` declaration explaining its role in the architecture and what it contains. Place it in the most representative file of the package.
 
-Example for a use case:
+```go
+// Package usecase contains the HTTP handlers for the apps API.
+// Each file implements one use case following the imperative shell pattern.
+package internal
+```
+
+### Exported symbols
+Every exported function, type, method, and constant must have a Go doc comment starting with the symbol name.
+
+```go
+// AppResponse is the HTTP response representation of an ArgoCD application.
+type AppResponse struct { ... }
+
+// ListApps handles GET /api/v1/apps.
+// Returns the list of all ArgoCD applications tracked in the cluster.
+func ListApps(manager types.AppManager) http.HandlerFunc { ... }
+```
+
+### Use case handlers
+Each `*_v1.go` handler comment must include:
+- HTTP method and path
+- What it does on success
+- Which 4xx codes it returns and why
+
 ```go
 // LockApp handles POST /api/v1/apps/{id}/lock.
 // Points the ArgoCD app to the given branch and marks it as locked by the PR.
 // Returns 404 if the app does not exist, 409 if it is already locked.
 func LockApp(manager types.AppManager) http.HandlerFunc {
 ```
+
+### Interfaces
+Every interface must document what it abstracts and who implements it.
+
+```go
+// AppManager abstracts read and write operations on ArgoCD applications.
+// Implemented by adapter.ArgoAppManager for the Kubernetes/ArgoCD backend.
+type AppManager interface { ... }
+```
+
+### Inline comments
+Add inline comments only where logic is non-obvious. Do not comment self-evident code.
 
 ## Architecture: Pure Core / Imperative Shell
 

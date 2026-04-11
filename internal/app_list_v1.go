@@ -7,9 +7,9 @@ package internal
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 
+	"gitbot/internal/server"
 	"gitbot/internal/types"
 )
 
@@ -41,16 +41,17 @@ func toAppResponse(app types.Application) AppResponse {
 // Returns the list of all ArgoCD applications currently tracked in the cluster.
 func ListApps(manager types.AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		slog.Info("ListApps request received")
+		log := server.Logger(r.Context())
+		log.Info("ListApps request received")
 
 		apps, err := manager.List()
 		if err != nil {
-			slog.Error("ListApps failed to fetch apps", "error", err)
+			log.Error("ListApps failed to fetch apps", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		slog.Info("ListApps returning apps", "count", len(apps))
+		log.Info("ListApps returning apps", "count", len(apps))
 
 		resp := make([]AppResponse, len(apps))
 		for i, a := range apps {

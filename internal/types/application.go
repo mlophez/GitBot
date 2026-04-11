@@ -1,18 +1,23 @@
 package types
 
+// Application represents an ArgoCD application tracked by the bot.
+// It is a pure value type — all state transitions are done via methods
+// that return a new copy, with no mutation of the receiver.
 type Application struct {
-	Name          string
-	Repository    string
-	Branch        string
-	Paths         []string
-	Locked        bool
-	PullRequestId int
-	ProviderId    int
-	LastBranch    string
-	Environment   string
-	ContainOther  bool
+	Name          string   // ArgoCD application name
+	Repository    string   // Git repository URL (e.g. "https://bitbucket.org/org/repo.git")
+	Branch        string   // Current targetRevision set in the ArgoCD spec
+	Paths         []string // File paths this app is responsible for (used for PR matching)
+	Locked        bool     // Whether the app is currently locked by a PR
+	PullRequestId int      // ID of the PR holding the lock (-1 when unlocked)
+	ProviderId    int      // Internal provider identifier
+	LastBranch    string   // Branch before the lock was applied (restored on unlock)
+	Environment   string   // Deployment environment (e.g. "dev", "prod")
+	ContainOther  bool     // True when this is an app-of-apps that manages other apps
 }
 
+// Sanitize corrects inconsistent state where the app is marked as locked
+// but the branch has not actually changed. Returns a corrected copy.
 func (app Application) Sanitize() Application {
 	if app.Locked && app.LastBranch == app.Branch {
 		app.Locked = false
@@ -20,6 +25,9 @@ func (app Application) Sanitize() Application {
 	return app
 }
 
+// Lock returns a copy of the application pointed at targetBranch and marked
+// as locked by prID. The current branch is saved in LastBranch for rollback.
+// If the app is already locked, it is returned unchanged.
 func (app Application) Lock(targetBranch string, prID int) Application {
 	if app.Locked {
 		return app
@@ -31,6 +39,8 @@ func (app Application) Lock(targetBranch string, prID int) Application {
 	return app
 }
 
+// Unlock returns a copy of the application restored to its previous branch
+// and marked as unlocked. If the app is not locked, it is returned unchanged.
 func (app Application) Unlock() Application {
 	if !app.Locked {
 		return app
