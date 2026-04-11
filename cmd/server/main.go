@@ -104,7 +104,7 @@ func buildAppManager(c *types.Config, local types.AppManager) types.AppManager {
 
 	// Register each remote agent cluster.
 	for _, cl := range remotes {
-		multi.Add(cl.Name, adapters.NewRemoteAppManager(cl.Auth.URL, cl.Name))
+		multi.Add(cl.Name, adapters.NewRemoteAppManager(cl.Auth.URL, cl.Name, cl.Auth.InsecureSkipTLSVerify))
 	}
 
 	return multi

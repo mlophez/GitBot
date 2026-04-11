@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,11 +23,19 @@ type RemoteAppManager struct {
 
 // NewRemoteAppManager creates a RemoteAppManager that talks to the agent at baseURL.
 // clusterName is stamped on every Application returned by List.
-func NewRemoteAppManager(baseURL, clusterName string) types.AppManager {
+// When insecureSkipTLSVerify is true the HTTP client skips certificate validation —
+// use only in non-production environments.
+func NewRemoteAppManager(baseURL, clusterName string, insecureSkipTLSVerify bool) types.AppManager {
+	transport := http.DefaultTransport
+	if insecureSkipTLSVerify {
+		transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // intentional, user-configured
+		}
+	}
 	return &RemoteAppManager{
 		baseURL:     baseURL,
 		clusterName: clusterName,
-		client:      &http.Client{Timeout: 10 * time.Second},
+		client:      &http.Client{Timeout: 10 * time.Second, Transport: transport},
 	}
 }
 

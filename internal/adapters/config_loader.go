@@ -92,8 +92,9 @@ type configFile struct {
 	Clusters []struct {
 		Name string `yaml:"name"`
 		Auth struct {
-			Type string `yaml:"type"`
-			URL  string `yaml:"url"`
+			Type                string `yaml:"type"`
+			URL                 string `yaml:"url"`
+			InsecureSkipTLSVerify bool   `yaml:"insecure-skip-tls-verify"`
 		} `yaml:"auth"`
 	} `yaml:"clusters"`
 	Security struct {
@@ -118,8 +119,9 @@ func (c configFile) clusterConfigs() []types.ClusterConfig {
 		result = append(result, types.ClusterConfig{
 			Name: cl.Name,
 			Auth: types.ClusterAuth{
-				Type: cl.Auth.Type,
-				URL:  cl.Auth.URL,
+				Type:                cl.Auth.Type,
+				URL:                 cl.Auth.URL,
+				InsecureSkipTLSVerify: cl.Auth.InsecureSkipTLSVerify,
 			},
 		})
 	}
