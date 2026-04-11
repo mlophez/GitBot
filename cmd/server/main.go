@@ -12,10 +12,6 @@ import (
 
 	"gitbot/internal"
 	"gitbot/internal/adapter"
-	"gitbot/internal/config"
-	"gitbot/internal/event/provider"
-	"gitbot/internal/event/queue"
-	"gitbot/internal/notification"
 	"gitbot/internal/server"
 	"gitbot/internal/types"
 	"gitbot/internal/worker"
@@ -24,22 +20,22 @@ import (
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
-	c := config.Load()
+	c := adapter.NewEnvConfigLoader().Load()
 
 	/* Apps API */
 	appManager := adapter.NewArgoAppManager(c.ClientSet)
 
 	/* Providers: Bitbucket, GitHub, GitLab, etc. */
-	bitbucket := provider.NewBitbucketProvider(c.BitbucketBearerToken)
+	bitbucket := adapter.NewBitbucketClient(c.BitbucketBearerToken)
 
 	/* Queue */
-	eventQueue := queue.NewMemoryQueue[types.QueueItem]()
+	eventQueue := adapter.NewMemoryQueue[types.QueueItem]()
 
 	/* Routes */
 	router := http.NewServeMux()
 	router.HandleFunc("GET /status", internal.Status)
 	router.HandleFunc("POST /api/v1/webhook/bitbucket", internal.EventCreate(eventQueue, bitbucket))
-	router.HandleFunc("POST /api/v1/notification", notification.HandleNotification(c.ClientSet, bitbucket))
+	router.HandleFunc("POST /api/v1/notification", internal.NotificationHandle(appManager, bitbucket))
 	router.HandleFunc("GET /api/v1/apps", internal.ListApps(appManager))
 	router.HandleFunc("POST /api/v1/apps/{id}/lock", internal.LockApp(appManager))
 	router.HandleFunc("POST /api/v1/apps/{id}/unlock", internal.UnlockApp(appManager))

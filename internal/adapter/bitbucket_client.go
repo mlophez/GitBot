@@ -1,77 +1,77 @@
-package provider
+package adapter
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"gitbot/internal/event"
+	"gitbot/internal/types"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 )
 
-type BitbucketProvider struct {
+// BitbucketClient implements types.Provider for Bitbucket webhooks and API calls.
+// It parses incoming webhook payloads, enriches events with diff and commit data,
+// and writes comments back to pull requests via the Bitbucket REST API.
+type BitbucketClient struct {
 	bearerToken string
 }
 
-func NewBitbucketProvider(token string) *BitbucketProvider {
-	return &BitbucketProvider{
+// NewBitbucketClient creates a BitbucketClient authenticated with the given bearer token.
+func NewBitbucketClient(token string) *BitbucketClient {
+	return &BitbucketClient{
 		bearerToken: token,
 	}
 }
 
-func (b BitbucketProvider) ParseEvent(headers http.Header, body io.ReadCloser) (event.Event, error) {
+// ParseEvent parses a Bitbucket webhook request into a types.Event.
+// Returns an error if the request body cannot be decoded.
+func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (types.Event, error) {
 	var webhook bpWebhookRequest
-	var e event.Event
+	var e types.Event
 
 	err := json.NewDecoder(body).Decode(&webhook)
 	if err != nil {
 		return e, err
 	}
 
-	///* Parse Event */
 	e.Repository = fmt.Sprintf("https://bitbucket.org/%s.git", webhook.Repository.FullName)
 	e.Author = webhook.Actor.UUID
 	e.PullRequest.Id = webhook.PullRequest.Id
 	e.PullRequest.SourceBranch = webhook.PullRequest.Source.Branch.Name
 	e.PullRequest.DestinationBranch = webhook.PullRequest.Destination.Branch.Name
 
-	// Comment
 	if webhook.Comment.Id > 0 && !webhook.Comment.Pending && !webhook.Comment.Deleted {
 		e.CommentId = webhook.Comment.Id
 		e.Comment = webhook.Comment.Content.Raw
 	}
 
-	// EventType
 	eventKey := headers.Get("X-Event-Key")
 	switch strings.ToLower(eventKey) {
 	case "pullrequest:created":
-		e.Type = event.EventTypeOpened
+		e.Type = types.EventTypeOpened
 	case "pullrequest:updated":
-		e.Type = event.EventTypeUpdated
+		e.Type = types.EventTypeUpdated
 	case "pullrequest:fulfilled":
-		e.Type = event.EventTypeMerged
+		e.Type = types.EventTypeMerged
 	case "pullrequest:rejected":
-		e.Type = event.EventTypeDeclined
+		e.Type = types.EventTypeDeclined
 	case "pullrequest:comment_created":
-		e.Type = event.EventTypeCommented
+		e.Type = types.EventTypeCommented
 	default:
-		e.Type = event.EventTypeUnknown
+		e.Type = types.EventTypeUnknown
 	}
 
-	// Approved and Request changeds
 	e.PullRequest.Approved = 0
 	e.PullRequest.RequestChanged = 0
 	for _, p := range webhook.PullRequest.Participants {
 		if p.Role == "REVIEWER" {
 			e.PullRequest.Reviewers++
 		}
-
 		if p.Role == "REVIEWER" && p.Approved {
 			e.PullRequest.Approved++
 		}
-
 		if p.Role == "REVIEWER" && p.State == "changes_requested" {
 			e.PullRequest.RequestChanged++
 		}
@@ -80,15 +80,14 @@ func (b BitbucketProvider) ParseEvent(headers http.Header, body io.ReadCloser) (
 	return e, err
 }
 
-func (b BitbucketProvider) GetData(e event.Event) (event.Event, error) {
-	// Get Changelog
+// GetData enriches an event with the files changed and commits behind from the Bitbucket API.
+func (b BitbucketClient) GetData(e types.Event) (types.Event, error) {
 	filesChanged, err := b.GetFilesChanged(e.Repository, e.PullRequest.Id)
 	if err != nil {
 		return e, err
 	}
 	e.PullRequest.FilesChanged = filesChanged
 
-	// Get commits behind target branch
 	commitsBehind, err := b.CompareBranchCommitTotal(e.Repository, e.PullRequest.DestinationBranch, e.PullRequest.SourceBranch)
 	if err != nil {
 		return e, err
@@ -98,35 +97,31 @@ func (b BitbucketProvider) GetData(e event.Event) (event.Event, error) {
 	return e, nil
 }
 
-func (b BitbucketProvider) GetFilesChanged(repo string, pullRequestId int) ([]string, error) {
+// GetFilesChanged returns the list of file paths modified in the given pull request.
+func (b BitbucketClient) GetFilesChanged(repo string, pullRequestId int) ([]string, error) {
 	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d/diffstat", b.getSlug(repo), pullRequestId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return []string{}, err
 	}
-
 	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		slog.Error("Error on response.\n[ERROR] -", err)
+		return []string{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			slog.Error("Error while reading the response bytes:", err)
-		}
-		slog.Info(string([]byte(body)))
-		return nil, fmt.Errorf("Error in get files changed")
+		body, _ := io.ReadAll(resp.Body)
+		slog.Info(string(body))
+		return nil, fmt.Errorf("GetFilesChanged: unexpected status %d", resp.StatusCode)
 	}
 
 	var respJSON bpDiffStatResponse
-	err = json.NewDecoder(resp.Body).Decode(&respJSON)
-	if err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&respJSON); err != nil {
 		return []string{}, err
 	}
 
@@ -139,29 +134,28 @@ func (b BitbucketProvider) GetFilesChanged(repo string, pullRequestId int) ([]st
 			files = append(files, f.New.Path)
 		}
 	}
-
 	return files, nil
 }
 
-func (b BitbucketProvider) WriteComment(repo string, prId int, parentId int, msg string) error {
+// WriteComment posts a comment on the pull request. If parentId > 0 the comment
+// is posted as a reply to that comment thread.
+func (b BitbucketClient) WriteComment(repo string, prId int, parentId int, msg string) error {
 	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d/comments", b.getSlug(repo), prId)
 
 	var payload []byte
 	if parentId > 0 {
-		var requestBody bpWriteCommentRequestParent
-		requestBody.Parent.Id = parentId
-		requestBody.Content.Raw = msg
-		// requestBody.Content.Raw = "**" + msg + "**"
-		p, err := json.Marshal(&requestBody)
+		var body bpWriteCommentRequestParent
+		body.Parent.Id = parentId
+		body.Content.Raw = msg
+		p, err := json.Marshal(&body)
 		if err != nil {
 			return err
 		}
 		payload = p
 	} else {
-		var requestBody bpWriteCommentRequest
-		requestBody.Content.Raw = msg
-		// requestBody.Content.Raw = "**" + msg + "**"
-		p, err := json.Marshal(&requestBody)
+		var body bpWriteCommentRequest
+		body.Content.Raw = msg
+		p, err := json.Marshal(&body)
 		if err != nil {
 			return err
 		}
@@ -172,105 +166,71 @@ func (b BitbucketProvider) WriteComment(repo string, prId int, parentId int, msg
 	if err != nil {
 		return err
 	}
-
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		slog.Error("Error on response.\n[ERROR] -", err)
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 201 {
 		str, _ := io.ReadAll(resp.Body)
 		slog.Info(string(str))
-		return fmt.Errorf("Error in send comment to pull request")
+		return fmt.Errorf("WriteComment: unexpected status %d", resp.StatusCode)
 	}
-
 	return nil
 }
 
-func (b BitbucketProvider) GetAuthor(url string) (string, error) {
-	author := ""
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return author, err
-	}
-
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		slog.Error("Error on response.\n[ERROR] -", err)
-	}
-	defer resp.Body.Close()
-
-	str, _ := io.ReadAll(resp.Body)
-	slog.Info(string(str))
-
-	//if resp.StatusCode != 201 {
-	//	str, _ := io.ReadAll(resp.Body)
-	//	slog.Info(string(str))
-	//	return fmt.Errorf("Error in send comment to pull request")
-	//}
-
-	return author, nil
-}
-
-func (b BitbucketProvider) getSlug(repo string) string {
-	// https://bitbucket.org/firmapro/platform-poc.git -> firmapro/platform-poc
-	repo = strings.Replace(repo, "https://bitbucket.org/", "", -1)
-	repo = strings.Replace(repo, ".git", "", -1)
-	return repo
-}
-
-func (b BitbucketProvider) CompareBranchCommitTotal(repository string, include string, exclude string) (int, error) {
+// CompareBranchCommitTotal returns the number of commits that exclude is behind include.
+func (b BitbucketClient) CompareBranchCommitTotal(repository string, include string, exclude string) (int, error) {
 	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/commits?include=%s&exclude=%s", b.getSlug(repository), include, exclude)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return 0, err
 	}
-
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		slog.Error("Error on response - ", err)
 		return 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return 0, fmt.Errorf("Error in send comment to pull request")
+		return 0, fmt.Errorf("CompareBranchCommitTotal: unexpected status %d", resp.StatusCode)
 	}
 
-	type Response struct {
+	var result struct {
 		Values []struct{} `json:"values"`
 	}
-
-	var commits Response
-	err = json.NewDecoder(resp.Body).Decode(&commits)
-	if err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return 0, err
-		//return []string{}, err
 	}
-
-	return len(commits.Values), nil
+	return len(result.Values), nil
 }
+
+func (b BitbucketClient) getSlug(repo string) string {
+	repo = strings.Replace(repo, "https://bitbucket.org/", "", -1)
+	repo = strings.Replace(repo, ".git", "", -1)
+	return repo
+}
+
+// ── Bitbucket API request/response types ─────────────────────────────────────
 
 type bpWebhookRequest struct {
 	Repository struct {
 		FullName string `json:"full_name"`
 	} `json:"repository"`
 	PullRequest struct {
-		Id     int    `json:"id"`
-		Title  string `json:"title"`
-		State  string `json:"state"`
+		Id    int    `json:"id"`
+		Title string `json:"title"`
+		State string `json:"state"`
 		Source struct {
 			Branch struct {
 				Name string `json:"name"`
@@ -313,22 +273,16 @@ type bpDiffStatResponse struct {
 }
 
 type bpWriteCommentRequestParent struct {
-	//Type string `json:"type"`
 	Parent struct {
 		Id int `json:"id"`
 	} `json:"parent"`
 	Content struct {
 		Raw string `json:"raw"`
-		//Html string `json:"html"`
-		//MarkUp string `json:"markup"`
 	} `json:"content"`
 }
 
 type bpWriteCommentRequest struct {
-	//Type string `json:"type"`
 	Content struct {
 		Raw string `json:"raw"`
-		//Html string `json:"html"`
-		//MarkUp string `json:"markup"`
 	} `json:"content"`
 }
