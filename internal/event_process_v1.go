@@ -1,136 +1,291 @@
 package internal
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
-	"time"
 
 	"gitbot/internal/types"
 )
 
-// ProcessFn is the function signature for processing a single event.
-// Returns the response to send back to the PR, and a bool indicating whether
-// the event should be retried (e.g. for app-of-apps double-lock).
-type ProcessFn func(types.Event) (*types.EventResponse, bool)
+// action represents the kind of operation derived from a PR event.
+type action int
 
-// EventProcessor dequeues events and processes them asynchronously.
-// For each event it: enriches via the provider, runs the process function,
-// and writes the result as a comment on the pull request.
-type EventProcessor struct {
-	queue       types.Queue
-	process     ProcessFn
-	clusterName string
-	quit        chan struct{}
-}
+const (
+	lockAction action = iota
+	unlockAction
+	unknownAction
+)
 
-// NewEventProcessor creates a processor ready to be started.
-func NewEventProcessor(queue types.Queue, process ProcessFn, clusterName string) *EventProcessor {
-	return &EventProcessor{
-		queue:       queue,
-		process:     process,
-		clusterName: clusterName,
-		quit:        make(chan struct{}),
-	}
-}
+// EventProcess returns a ProcessFn that is the core event-processing use case.
+// It determines the action (lock or unlock) from the event, finds matching ArgoCD
+// applications via manager, validates the PR state, and applies the operation.
+//
+// Returns nil response when the event should be silently ignored (unknown action, no apps found).
+func EventProcess(manager types.AppManager) types.ProcessFn {
+	return func(e types.Event) (*types.EventResponse, bool) {
+		slog.Info("EventProcess: processing event", "type", e.Type)
 
-// Start begins the processing loop. Intended to be run in a goroutine.
-// Polls the queue every second and processes each item.
-func (p *EventProcessor) Start() {
-	for {
-		select {
-		case <-p.quit:
-			return
-		default:
-			time.Sleep(1 * time.Second)
+		act, env, appname := parseAction(e)
+		if act == unknownAction || env == nil {
+			return nil, false
+		}
 
-			next := p.queue.Dequeue()
-			if next == nil {
-				continue
+		switch act {
+		case lockAction:
+			apps, err := manager.List()
+			if err != nil {
+				slog.Error("EventProcess: failed to list apps", "error", err)
+				return nil, false
 			}
 
-			// Enrich event with files changed and commits behind — retry up to 3 times.
-			var e types.Event
-			for i := 1; i <= 3; i++ {
-				var err error
-				e, err = next.Provider.GetData(next.Event)
-				if err == nil {
-					break
+			apps = filterByRepoAndFiles(apps, e.Repository, e.PullRequest.FilesChanged)
+			apps = filterByEnv(apps, *env)
+			apps = filterByAppName(apps, *appname)
+
+			if len(apps) == 0 {
+				slog.Info("EventProcess: no matching apps found")
+				return nil, false
+			}
+
+			if e.PullRequest.Approved == 0 && e.PullRequest.Reviewers != 0 {
+				return &types.EventResponse{Success: false, Message: "You need at least one approval from a reviewer"}, false
+			}
+			if e.PullRequest.RequestChanged > 0 {
+				return &types.EventResponse{Success: false, Message: "One of the reviewers has requested changes"}, false
+			}
+			if e.PullRequest.CommitsBehind > 0 {
+				return &types.EventResponse{
+					Success: false,
+					Message: fmt.Sprintf("This pull request is %d commits behind '%s', sync your branch!", e.PullRequest.CommitsBehind, e.PullRequest.DestinationBranch),
+				}, false
+			}
+
+			return applyLock(manager, e.PullRequest, apps), false
+
+		case unlockAction:
+			apps, err := manager.List()
+			if err != nil {
+				slog.Error("EventProcess: failed to list apps", "error", err)
+				return nil, false
+			}
+
+			// Collect apps currently locked by this PR.
+			var locked []types.Application
+			for _, a := range apps {
+				if a.PullRequestId == e.PullRequest.Id {
+					locked = append(locked, a.Sanitize())
 				}
-				slog.Warn("EventProcessor GetData failed, retrying", "attempt", i, "error", err)
-				time.Sleep(1 * time.Second)
 			}
 
-			resp, retry := p.process(e)
+			locked = filterByEnv(locked, *env)
+			locked = filterByAppName(locked, *appname)
 
-			// Re-enqueue for app-of-apps double-lock scenario.
-			if resp != nil && retry {
-				slog.Info("EventProcessor re-enqueueing event for retry")
-				time.Sleep(30 * time.Second)
-				p.queue.Enqueue(*next)
+			if len(locked) == 0 {
+				slog.Info("EventProcess: no matching apps found for unlock")
+				return nil, false
 			}
 
-			if resp == nil {
-				continue
-			}
-
-			msg := p.formatResponse(resp)
-			if err := next.Provider.WriteComment(
-				next.Event.Repository,
-				next.Event.PullRequest.Id,
-				next.Event.CommentId,
-				msg,
-			); err != nil {
-				slog.Error("EventProcessor failed to write comment", "error", err)
-			}
+			return applyUnlock(manager, e, locked), false
 		}
+
+		return nil, false
 	}
 }
 
-// Stop drains the queue gracefully and shuts down the processor.
-// Blocks until the queue is empty or the context is cancelled.
-func (p *EventProcessor) Stop(ctx context.Context) {
-	defer close(p.quit)
-	for {
-		select {
-		case <-ctx.Done():
-			return
+// parseAction extracts the action (lock/unlock), target environment, and app name
+// from a PR event. Returns unknownAction and nil pointers when the event carries no command.
+func parseAction(e types.Event) (action, *string, *string) {
+	env := "all"
+	appname := "all"
+
+	switch e.Type {
+	case types.EventTypeDeclined, types.EventTypeMerged:
+		return unlockAction, &env, &appname
+
+	case types.EventTypeCommented:
+		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)(?: (\w+))?(?: ([- \w]+))?`).
+			FindStringSubmatch(e.Comment)
+		if len(filter) <= 3 {
+			break
+		}
+		command := filter[3]
+		if len(filter) > 4 && filter[4] != "" {
+			env = strings.ToLower(filter[4])
+		}
+		if len(filter) > 5 && filter[5] != "" {
+			appname = strings.ToLower(filter[5])
+		}
+		switch strings.ToUpper(command) {
+		case "LOCK", "DEPLOY", "TEST":
+			return lockAction, &env, &appname
+		case "UNLOCK", "UNDEPLOY", "ROLLBACK":
+			return unlockAction, &env, &appname
+		}
+	}
+
+	return unknownAction, nil, nil
+}
+
+// applyLock locks all provided apps to the PR's source branch.
+// Returns a failed response if any app is locked by another PR or has a branch mismatch.
+func applyLock(manager types.AppManager, pr types.PullRequest, apps []types.Application) *types.EventResponse {
+	resp := types.EventResponse{Success: true}
+
+	anyLockedByAnother := false
+	anyBranchMismatch := false
+
+	for _, a := range apps {
+		switch {
+		case a.Locked && a.PullRequestId != pr.Id:
+			anyLockedByAnother = true
+			resp.Summary = append(resp.Summary, types.EventAppStatus{
+				Name:    a.Name,
+				Message: fmt.Sprintf("This app is blocked by another pr (%d)", a.PullRequestId),
+			})
+		case a.Locked:
+			resp.Summary = append(resp.Summary, types.EventAppStatus{Name: a.Name, Message: "Locked"})
+		case a.Branch != pr.DestinationBranch:
+			anyBranchMismatch = true
+			resp.Summary = append(resp.Summary, types.EventAppStatus{
+				Name:    a.Name,
+				Message: fmt.Sprintf("App with branch '%s' dont match with pull request target branch '%s')", a.Branch, pr.DestinationBranch),
+			})
 		default:
-			time.Sleep(1 * time.Second)
-			if p.queue.Size() <= 0 {
-				return
+			resp.Summary = append(resp.Summary, types.EventAppStatus{Name: a.Name, Message: "Unlocked"})
+		}
+	}
+
+	if anyBranchMismatch || anyLockedByAnother {
+		resp.Success = false
+		return &resp
+	}
+
+	for i, a := range apps {
+		if !a.Locked {
+			slog.Info("EventProcess: locking app", "app", a.Name)
+			if err := manager.Lock(a, pr.SourceBranch, pr.Id); err != nil {
+				slog.Error("EventProcess: failed to lock app", "app", a.Name, "error", err)
+				resp.Success = false
+				resp.Summary[i].Message = "Error at lock application"
+				return &resp
+			}
+			resp.Summary[i].Message = "Locked"
+		}
+	}
+
+	return &resp
+}
+
+// applyUnlock unlocks apps that are locked by the given PR.
+// Returns nil for merge/decline events when all unlocks succeed (silent operation).
+func applyUnlock(manager types.AppManager, e types.Event, apps []types.Application) *types.EventResponse {
+	resp := types.EventResponse{Success: true}
+
+	anyLockedByMe := false
+	for _, a := range apps {
+		if a.Locked {
+			anyLockedByMe = true
+		}
+		resp.Summary = append(resp.Summary, types.EventAppStatus{
+			Name:    a.Name,
+			Message: lockedStatus(a.Locked),
+		})
+	}
+
+	if !anyLockedByMe {
+		if e.Type == types.EventTypeMerged || e.Type == types.EventTypeDeclined {
+			return nil
+		}
+		return &resp
+	}
+
+	for i, a := range apps {
+		if !a.Locked {
+			continue
+		}
+		if err := manager.Unlock(a); err != nil {
+			slog.Error("EventProcess: failed to unlock app", "app", a.Name, "error", err)
+			resp.Success = false
+			resp.Summary[i].Message = "Error at unlock application"
+			return &resp
+		}
+		resp.Summary[i].Message = "Unlocked"
+	}
+
+	if resp.Success && (e.Type == types.EventTypeMerged || e.Type == types.EventTypeDeclined) {
+		return nil
+	}
+
+	return &resp
+}
+
+// ── Pure filter functions ─────────────────────────────────────────────────────
+
+// filterByEnv returns apps whose environment matches env, or all apps when env is "all".
+func filterByEnv(apps []types.Application, env string) []types.Application {
+	var result []types.Application
+	for _, a := range apps {
+		if strings.EqualFold(a.Environment, env) || env == "all" {
+			result = append(result, a.Sanitize())
+		}
+	}
+	return result
+}
+
+// filterByAppName returns apps whose name matches name, or all apps when name is "all".
+func filterByAppName(apps []types.Application, name string) []types.Application {
+	var result []types.Application
+	for _, a := range apps {
+		if strings.EqualFold(a.Name, name) || name == "all" {
+			result = append(result, a.Sanitize())
+		}
+	}
+	return result
+}
+
+// filterByRepoAndFiles returns apps that own at least one of the changed files in repo.
+func filterByRepoAndFiles(apps []types.Application, repo string, files []string) []types.Application {
+	var result []types.Application
+	for _, a := range apps {
+		if matchByRepoAndFiles(a, repo, files) {
+			result = append(result, a.Sanitize())
+		}
+	}
+	return result
+}
+
+func matchByRepoAndFiles(a types.Application, repo string, files []string) bool {
+	if a.Repository != repo {
+		return false
+	}
+	for _, file := range files {
+		for _, path := range a.Paths {
+			if strings.Contains(normalizePath(file), normalizePath(path)) {
+				return true
 			}
 		}
 	}
+	return false
 }
 
-// formatResponse builds the comment body from an EventResponse.
-func (p *EventProcessor) formatResponse(resp *types.EventResponse) string {
-	var msg string
-
-	if p.clusterName != "" {
-		status := ternary(resp.Success, "SUCCESS", "FAILED")
-		msg = fmt.Sprintf("**[%s]** => **%s**\n\n", strings.ToUpper(p.clusterName), status)
-	} else {
-		status := ternary(resp.Success, "Success", "Failed")
-		msg = fmt.Sprintf("### Status: **%s**", status)
+func normalizePath(path string) string {
+	if len(path) > 1 && path[0] == '.' && path[1] == '/' {
+		path = strings.TrimPrefix(path, ".")
 	}
-
-	if resp.Message != "" {
-		msg += resp.Message + ".  \n"
-	} else {
-		for _, app := range resp.Summary {
-			msg += fmt.Sprintf("- **%s:** %s.  \n", strings.ToUpper(app.Name), app.Message)
-		}
+	if len(path) > 0 && path[0] != '/' {
+		path = "/" + path
 	}
-
-	return msg
+	if len(path) > 0 && path[len(path)-1] != '/' {
+		path += "/"
+	}
+	return path
 }
 
-func ternary(cond bool, a, b string) string {
-	if cond {
-		return a
+func lockedStatus(locked bool) string {
+	if locked {
+		return "Locked"
 	}
-	return b
+	return "Unlocked"
 }

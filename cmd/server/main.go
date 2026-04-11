@@ -12,14 +12,13 @@ import (
 
 	"gitbot/internal"
 	"gitbot/internal/adapter"
-	"gitbot/internal/app"
 	"gitbot/internal/config"
-	"gitbot/internal/event"
 	"gitbot/internal/event/provider"
 	"gitbot/internal/event/queue"
 	"gitbot/internal/notification"
 	"gitbot/internal/server"
 	"gitbot/internal/types"
+	"gitbot/internal/worker"
 )
 
 func main() {
@@ -27,15 +26,14 @@ func main() {
 
 	c := config.Load()
 
-	/* Event processing */
-	aService := app.NewService(c.ClientSet)
-	eService := event.NewService(c.SecurityRules, aService)
-	eventQueue := queue.NewMemoryQueue[types.QueueItem]()
-	bitbucket := provider.NewBitbucketProvider(c.BitbucketBearerToken)
-	processor := internal.NewEventProcessor(eventQueue, eService.Process, c.ClusterName)
-
 	/* Apps API */
 	appManager := adapter.NewArgoAppManager(c.ClientSet)
+
+	/* Providers: Bitbucket, GitHub, GitLab, etc. */
+	bitbucket := provider.NewBitbucketProvider(c.BitbucketBearerToken)
+
+	/* Queue */
+	eventQueue := queue.NewMemoryQueue[types.QueueItem]()
 
 	/* Routes */
 	router := http.NewServeMux()
@@ -56,6 +54,8 @@ func main() {
 		}
 	}()
 
+	/* Event processing */
+	processor := worker.NewEventProcessor(eventQueue, internal.EventProcess(appManager), c.ClusterName)
 	go processor.Start()
 
 	done := make(chan os.Signal, 1)
