@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"gitbot/internal/adapter"
 	"gitbot/internal/app"
 	"gitbot/internal/config"
+	"gitbot/internal"
 	"gitbot/internal/event"
 	"gitbot/internal/event/provider"
 	"gitbot/internal/event/queue"
@@ -40,11 +42,20 @@ func main() {
 	bitbucket := provider.NewBitbucketProvider(c.BitbucketBearerToken)
 	bitbucketHandler := event.NewHandler(queue, bitbucket)
 
+	/* Apps API */
+	listApps  := adapter.ListApps(c.ClientSet)
+	getApp    := adapter.GetApp(c.ClientSet)
+	updateApp := adapter.UpdateApp(c.ClientSet)
+	cleanApp  := adapter.CleanApp(c.ClientSet)
+
 	/* Routes */
 	router := http.NewServeMux()
 	router.HandleFunc("GET /status", status)
 	router.HandleFunc("POST /api/v1/webhook/bitbucket", bitbucketHandler.Handle())
 	router.HandleFunc("POST /api/v1/notification", notification.HandleNotification(c.ClientSet, bitbucket))
+	router.HandleFunc("GET /api/v1/apps", internal.ListApps(listApps))
+	router.HandleFunc("POST /api/v1/apps/{id}/lock", internal.LockApp(getApp, updateApp))
+	router.HandleFunc("POST /api/v1/apps/{id}/unlock", internal.UnlockApp(getApp, updateApp, cleanApp))
 
 	// Starting Http Server
 	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: router}
