@@ -3,22 +3,15 @@ package event
 import (
 	"fmt"
 	"gitbot/internal/app"
+	"gitbot/internal/types"
 	"log/slog"
 	"regexp"
 	"strings"
 )
 
-/*** Event Response ***/
-type Response struct {
-	Success bool
-	Message string
-	Summary []AppStatus
-}
-
-type AppStatus struct {
-	Name    string
-	Message string
-}
+// Type aliases — canonical definitions live in internal/types.
+type Response = types.EventResponse
+type AppStatus = types.EventAppStatus
 
 /*** Action Interface ***/
 type Action int

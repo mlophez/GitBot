@@ -1,25 +1,17 @@
 package event
 
-type EventType int
+import "gitbot/internal/types"
+
+// Type aliases — the canonical definitions live in internal/types.
+
+type EventType = types.EventType
+type Event = types.Event
 
 const (
-	// EventType
-	EventTypeUnknown   EventType = -1
-	EventTypeOpened    EventType = 0
-	EventTypeUpdated   EventType = 1
-	EventTypeDeclined  EventType = 2
-	EventTypeMerged    EventType = 3
-	EventTypeCommented EventType = 4
+	EventTypeUnknown   = types.EventTypeUnknown
+	EventTypeOpened    = types.EventTypeOpened
+	EventTypeUpdated   = types.EventTypeUpdated
+	EventTypeDeclined  = types.EventTypeDeclined
+	EventTypeMerged    = types.EventTypeMerged
+	EventTypeCommented = types.EventTypeCommented
 )
-
-type Event struct {
-	Type          EventType
-	Repository    string
-	Author        string
-	Comment       string
-	CommentId     int
-	PullRequest   PullRequest
-	PullRequestID int
-}
-
-func NewEvent() {}

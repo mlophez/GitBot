@@ -1,0 +1,22 @@
+package types
+
+import (
+	"io"
+	"net/http"
+)
+
+// Provider is the interface for a Git hosting provider (Bitbucket, GitHub, etc.).
+// It handles webhook parsing, event enrichment, and writing comments back to PRs.
+// Implemented by adapter.BitbucketProvider.
+type Provider interface {
+	// ParseEvent reads the raw HTTP webhook and returns a structured Event.
+	ParseEvent(headers http.Header, body io.ReadCloser) (Event, error)
+
+	// GetData enriches an event with additional data fetched from the provider API
+	// (files changed, commits behind, etc.).
+	GetData(Event) (Event, error)
+
+	// WriteComment posts a comment on the pull request. If parentId > 0 the comment
+	// is posted as a reply to that comment thread.
+	WriteComment(repo string, prId int, parentId int, msg string) error
+}

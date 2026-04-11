@@ -1,47 +1,17 @@
 package event
 
-import (
-	"io"
-	"net/http"
-)
+import "gitbot/internal/types"
 
-type PullRequest struct {
-	Id                int
-	SourceBranch      string
-	DestinationBranch string
-	Reviewers         int
-	Approved          int
-	RequestChanged    int
-	CommitsBehind     int
-	FilesChanged      []string
-}
+// Type aliases — the canonical definitions live in internal/types.
+// These aliases keep existing code in this package compiling without changes.
 
-type QueueItem struct {
-	Event    Event
-	Provider Provider
-}
+type PullRequest = types.PullRequest
+type QueueItem = types.QueueItem
+type SecurityRule = types.SecurityRule
+type Queue = types.Queue
+type Provider = types.Provider
 
-type SecurityRule struct {
-	Repository   string
-	FilePatterns []string
-	Actions      []string
-	Users        []string
-}
-
-type Queue interface {
-	Enqueue(item QueueItem)
-	NextItem() *QueueItem
-	Dequeue() *QueueItem
-	Size() int
-}
-
-type Provider interface {
-	//Name() string
-	ParseEvent(headers http.Header, body io.ReadCloser) (Event, error)
-	GetData(Event) (Event, error)
-	WriteComment(repo string, prId int, parentId int, msg string) error
-	//	RespondEvent(e GitEvent, msg string) error
-}
+// ProcessEventResult and AppValidationResult are internal to this package.
 
 type ProcessEventResult int
 
