@@ -19,12 +19,19 @@ const (
 	fieldManager  = "gitbot"
 )
 
+// ArgoAppManager implements types.AppManager for a single Kubernetes cluster
+// running ArgoCD. It reads and writes ArgoCD Application resources via the
+// Kubernetes REST API.
 type ArgoAppManager struct {
-	clientset *kubernetes.Clientset
+	clientset   *kubernetes.Clientset
+	clusterName string
 }
 
-func NewArgoAppManager(cs *kubernetes.Clientset) types.AppManager {
-	return &ArgoAppManager{clientset: cs}
+// NewArgoAppManager creates an ArgoAppManager for the given Kubernetes clientset.
+// clusterName is stamped on every Application returned by List so that callers
+// can identify which cluster the app belongs to.
+func NewArgoAppManager(cs *kubernetes.Clientset, clusterName string) types.AppManager {
+	return &ArgoAppManager{clientset: cs, clusterName: clusterName}
 }
 
 func (a *ArgoAppManager) List() ([]types.Application, error) {
@@ -42,7 +49,9 @@ func (a *ArgoAppManager) List() ([]types.Application, error) {
 
 	apps := make([]types.Application, 0, len(list.Items))
 	for _, item := range list.Items {
-		apps = append(apps, toApplication(item))
+		app := toApplication(item)
+		app.Cluster = a.clusterName
+		apps = append(apps, app)
 	}
 	return apps, nil
 }
@@ -171,13 +180,15 @@ func toRequest(app types.Application) argoAppPatch {
 	return p
 }
 
+// NewListApps returns a function that lists all ArgoCD applications in the cluster.
 func NewListApps(cs *kubernetes.Clientset) func() ([]types.Application, error) {
-	m := &ArgoAppManager{clientset: cs}
+	m := &ArgoAppManager{clientset: cs, clusterName: os.Getenv("CLUSTER_NAME")}
 	return m.List
 }
 
+// GetApp returns a function that finds a single ArgoCD application by name.
 func GetApp(cs *kubernetes.Clientset) func(name string) (types.Application, error) {
-	m := &ArgoAppManager{clientset: cs}
+	m := &ArgoAppManager{clientset: cs, clusterName: os.Getenv("CLUSTER_NAME")}
 	return func(name string) (types.Application, error) {
 		apps, err := m.List()
 		if err != nil {

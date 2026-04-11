@@ -2,9 +2,11 @@ package adapters
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -23,27 +25,44 @@ func NewEnvConfigLoader() *EnvConfigLoader {
 	return &EnvConfigLoader{}
 }
 
-// Load reads environment variables from env.ini and returns a populated Config.
+// Load reads environment variables from env.ini, parses the optional config.yaml
+// for cluster definitions and security rules, and returns a populated Config.
 // Panics if the env file cannot be loaded or the Kubernetes clientset cannot be created.
 func (l *EnvConfigLoader) Load() *types.Config {
 	if err := godotenv.Load("env.ini"); err != nil {
 		panic("Error loading env.ini: " + err.Error())
 	}
 
-	// YAML security rules loading (disabled — enable when config.yaml is wired up):
-	// filepath := os.Getenv("CONFIG_FILE")
-	// data, _ := os.ReadFile(filepath)
-	// var cf configFile
-	// yaml.Unmarshal(data, &cf)
-	// cf.validate()
-	// rules := cf.securityRules()
+	var clusters []types.ClusterConfig
+	var rules []types.SecurityRule
+
+	if filepath := os.Getenv("CONFIG_FILE"); filepath != "" {
+		data, err := os.ReadFile(filepath)
+		if err != nil {
+			slog.Warn("Could not read config file, skipping", "path", filepath, "error", err)
+		} else {
+			var cf configFile
+			if err := yaml.Unmarshal(data, &cf); err != nil {
+				slog.Warn("Could not parse config file, skipping", "path", filepath, "error", err)
+			} else {
+				if err := cf.validate(); err != nil {
+					slog.Warn("Config file validation failed, skipping security rules", "error", err)
+				} else {
+					rules = cf.securityRules()
+				}
+				clusters = cf.clusterConfigs()
+			}
+		}
+	}
 
 	return &types.Config{
-		SecurityRules:        []types.SecurityRule{},
-		HttpPort:             os.Getenv("HTTP_PORT"),
-		BitbucketBearerToken: os.Getenv("BITBUCKET_BEARER_TOKEN"),
-		ClusterName:          os.Getenv("CLUSTER_NAME"),
-		ClientSet:            newKubernetesClient(),
+		SecurityRules:         rules,
+		HttpPort:              os.Getenv("HTTP_PORT"),
+		BitbucketBearerToken:  os.Getenv("BITBUCKET_BEARER_TOKEN"),
+		ClusterName:           os.Getenv("CLUSTER_NAME"),
+		ClientSet:             newKubernetesClient(),
+		Clusters:              clusters,
+		BotKubernetesUsername: os.Getenv("BOT_KUBERNETES_USERNAME"),
 	}
 }
 
@@ -67,8 +86,16 @@ func newKubernetesClient() *kubernetes.Clientset {
 
 // ── YAML config file (security rules) ────────────────────────────────────────
 
-// configFile is the schema for the optional config.yaml security rules file.
+// configFile is the schema for the optional config.yaml file.
+// It holds cluster definitions and security rules.
 type configFile struct {
+	Clusters []struct {
+		Name string `yaml:"name"`
+		Auth struct {
+			Type string `yaml:"type"`
+			URL  string `yaml:"url"`
+		} `yaml:"auth"`
+	} `yaml:"clusters"`
 	Security struct {
 		Groups []struct {
 			Name  string   `yaml:"name"`
@@ -82,6 +109,21 @@ type configFile struct {
 			UserList        []string `yaml:"user"`
 		} `yaml:"rules"`
 	} `yaml:"security"`
+}
+
+// clusterConfigs converts the YAML cluster definitions into domain ClusterConfig values.
+func (c configFile) clusterConfigs() []types.ClusterConfig {
+	var result []types.ClusterConfig
+	for _, cl := range c.Clusters {
+		result = append(result, types.ClusterConfig{
+			Name: cl.Name,
+			Auth: types.ClusterAuth{
+				Type: cl.Auth.Type,
+				URL:  cl.Auth.URL,
+			},
+		})
+	}
+	return result
 }
 
 func (c configFile) validate() error {

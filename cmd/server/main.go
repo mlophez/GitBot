@@ -20,8 +20,11 @@ func main() {
 
 	c := adapters.NewEnvConfigLoader().Load()
 
-	/* Apps API */
-	appManager := adapters.NewArgoAppManager(c.ClientSet)
+	/* Apps API — local cluster is always managed directly.
+	   If the config defines remote agent clusters, a multi-cluster manager is built
+	   so that events are processed across all clusters and responses are centralised. */
+	localManager := adapters.NewArgoAppManager(c.ClientSet, c.ClusterName)
+	appManager := buildAppManager(c, localManager)
 
 	/* Providers: Bitbucket, GitHub, GitLab, etc. */
 	bitbucket := adapters.NewBitbucketClient(c.BitbucketBearerToken)
@@ -37,6 +40,7 @@ func main() {
 	router.HandleFunc("GET /api/v1/apps", internal.ListApps(appManager))
 	router.HandleFunc("POST /api/v1/apps/{id}/lock", internal.LockApp(appManager))
 	router.HandleFunc("POST /api/v1/apps/{id}/unlock", internal.UnlockApp(appManager))
+	router.HandleFunc("POST /api/v1/admission/apps/validate", internal.ValidateApp(c.BotKubernetesUsername))
 
 	/* HTTP server */
 	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: requestID(router)}
@@ -70,4 +74,38 @@ func main() {
 	slog.Info("Server stopped")
 	time.Sleep(3 * time.Second)
 	os.Exit(0)
+}
+
+// buildAppManager returns a MultiClusterAppManager when the config defines remote
+// agent clusters, or the local manager directly when there are none.
+// Single-cluster deployments are unaffected by this change.
+func buildAppManager(c *types.Config, local types.AppManager) types.AppManager {
+	var remotes []types.ClusterConfig
+	for _, cl := range c.Clusters {
+		if cl.Auth.Type == "agent" {
+			remotes = append(remotes, cl)
+		}
+	}
+	if len(remotes) == 0 {
+		return local
+	}
+
+	multi := adapters.NewMultiClusterAppManager()
+
+	// Register the local cluster. Prefer the name from config; fall back to CLUSTER_NAME.
+	localName := c.ClusterName
+	for _, cl := range c.Clusters {
+		if cl.Auth.Type == "serviceaccount" {
+			localName = cl.Name
+			break
+		}
+	}
+	multi.Add(localName, local)
+
+	// Register each remote agent cluster.
+	for _, cl := range remotes {
+		multi.Add(cl.Name, adapters.NewRemoteAppManager(cl.Auth.URL, cl.Name))
+	}
+
+	return multi
 }

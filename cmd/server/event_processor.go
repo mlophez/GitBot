@@ -104,20 +104,68 @@ func (p *eventProcessor) stop(ctx context.Context) {
 }
 
 func (p *eventProcessor) formatResponse(resp *types.EventResponse) string {
-	var msg string
-	if p.clusterName != "" {
-		msg = fmt.Sprintf("**[%s]** => **%s**\n\n", strings.ToUpper(p.clusterName), ternary(resp.Success, "SUCCESS", "FAILED"))
-	} else {
-		msg = fmt.Sprintf("### Status: **%s**", ternary(resp.Success, "Success", "Failed"))
-	}
 	if resp.Message != "" {
-		msg += resp.Message + ".  \n"
-	} else {
+		status := ternary(resp.Success, "Success", "Failed")
+		return fmt.Sprintf("### Status: **%s**\n\n%s.  \n", status, resp.Message)
+	}
+
+	// Group summary entries by cluster to produce one section per cluster.
+	grouped := groupByCluster(resp.Summary)
+
+	// Single cluster (or no cluster tag): use the compact header format.
+	if len(grouped) <= 1 {
+		clusterName := p.clusterName
+		for k := range grouped {
+			if k != "" {
+				clusterName = k
+			}
+		}
+		var msg string
+		if clusterName != "" {
+			msg = fmt.Sprintf("**[%s]** => **%s**\n\n", strings.ToUpper(clusterName), ternary(resp.Success, "SUCCESS", "FAILED"))
+		} else {
+			msg = fmt.Sprintf("### Status: **%s**\n\n", ternary(resp.Success, "Success", "Failed"))
+		}
 		for _, app := range resp.Summary {
 			msg += fmt.Sprintf("- **%s:** %s.  \n", strings.ToUpper(app.Name), app.Message)
 		}
+		return msg
+	}
+
+	// Multiple clusters: one section per cluster.
+	var msg string
+	for _, clusterName := range sortedClusterKeys(grouped) {
+		msg += fmt.Sprintf("**[%s]** => **%s**\n\n", strings.ToUpper(clusterName), ternary(resp.Success, "SUCCESS", "FAILED"))
+		for _, app := range grouped[clusterName] {
+			msg += fmt.Sprintf("- **%s:** %s.  \n", strings.ToUpper(app.Name), app.Message)
+		}
+		msg += "\n"
 	}
 	return msg
+}
+
+// groupByCluster groups EventAppStatus entries by their Cluster field.
+func groupByCluster(apps []types.EventAppStatus) map[string][]types.EventAppStatus {
+	result := make(map[string][]types.EventAppStatus)
+	for _, a := range apps {
+		result[a.Cluster] = append(result[a.Cluster], a)
+	}
+	return result
+}
+
+// sortedClusterKeys returns the map keys in ascending order for deterministic output.
+func sortedClusterKeys(m map[string][]types.EventAppStatus) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	// Simple insertion sort — cluster counts are tiny.
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	return keys
 }
 
 func ternary(cond bool, a, b string) string {

@@ -62,6 +62,7 @@ type EventResponse struct {
 // EventAppStatus describes the outcome of a lock or unlock operation on a single app.
 type EventAppStatus struct {
 	Name    string
+	Cluster string
 	Message string
 }
 

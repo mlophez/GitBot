@@ -1,0 +1,121 @@
+package adapters
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"gitbot/internal/types"
+)
+
+// RemoteAppManager implements types.AppManager by calling a remote GitBot
+// agent instance's REST API over HTTP. Used by the central instance to
+// manage ArgoCD applications on remote clusters.
+type RemoteAppManager struct {
+	baseURL     string
+	clusterName string
+	client      *http.Client
+}
+
+// NewRemoteAppManager creates a RemoteAppManager that talks to the agent at baseURL.
+// clusterName is stamped on every Application returned by List.
+func NewRemoteAppManager(baseURL, clusterName string) types.AppManager {
+	return &RemoteAppManager{
+		baseURL:     baseURL,
+		clusterName: clusterName,
+		client:      &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+// remoteAppResponse mirrors the JSON shape returned by the agent's GET /api/v1/apps.
+type remoteAppResponse struct {
+	Name          string   `json:"name"`
+	Cluster       string   `json:"cluster,omitempty"`
+	Repository    string   `json:"repository"`
+	Branch        string   `json:"branch"`
+	Paths         []string `json:"paths,omitempty"`
+	Locked        bool     `json:"locked"`
+	PullRequestId int      `json:"pull_request_id"`
+	Environment   string   `json:"environment"`
+}
+
+// remoteLockRequest is the JSON body sent to the agent's POST /api/v1/apps/{id}/lock.
+type remoteLockRequest struct {
+	Branch        string `json:"branch"`
+	PullRequestId int    `json:"pull_request_id"`
+}
+
+// List fetches all applications from the remote agent and returns them
+// with the Cluster field set to the configured cluster name.
+func (r *RemoteAppManager) List() ([]types.Application, error) {
+	resp, err := r.client.Get(r.baseURL + "/api/v1/apps")
+	if err != nil {
+		return nil, fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("remote agent %q returned %d: %s", r.clusterName, resp.StatusCode, string(body))
+	}
+
+	var items []remoteAppResponse
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, fmt.Errorf("remote agent %q: failed to decode response: %w", r.clusterName, err)
+	}
+
+	apps := make([]types.Application, 0, len(items))
+	for _, item := range items {
+		apps = append(apps, types.Application{
+			Name:          item.Name,
+			Cluster:       r.clusterName,
+			Repository:    item.Repository,
+			Branch:        item.Branch,
+			Paths:         item.Paths,
+			Locked:        item.Locked,
+			PullRequestId: item.PullRequestId,
+			Environment:   item.Environment,
+		})
+	}
+	return apps, nil
+}
+
+// Lock tells the remote agent to lock the application to targetBranch for prID.
+func (r *RemoteAppManager) Lock(app types.Application, targetBranch string, prID int) error {
+	body, err := json.Marshal(remoteLockRequest{Branch: targetBranch, PullRequestId: prID})
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/api/v1/apps/%s/lock", r.baseURL, app.Name)
+	resp, err := r.client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("remote agent %q lock failed (%d): %s", r.clusterName, resp.StatusCode, string(msg))
+	}
+	return nil
+}
+
+// Unlock tells the remote agent to unlock the application.
+func (r *RemoteAppManager) Unlock(app types.Application) error {
+	url := fmt.Sprintf("%s/api/v1/apps/%s/unlock", r.baseURL, app.Name)
+	resp, err := r.client.Post(url, "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("remote agent %q unlock failed (%d): %s", r.clusterName, resp.StatusCode, string(msg))
+	}
+	return nil
+}

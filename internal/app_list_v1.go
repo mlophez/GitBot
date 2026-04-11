@@ -15,23 +15,27 @@ import (
 )
 
 // AppResponse is the HTTP response representation of an ArgoCD application.
-// It exposes only the fields relevant to API consumers, hiding internal
-// domain details such as Paths, ProviderId or ContainOther.
+// It exposes the fields relevant to API consumers and to remote agent
+// communication (Paths is needed by the central instance for file-matching).
 type AppResponse struct {
-	Name          string `json:"name"`
-	Repository    string `json:"repository"`
-	Branch        string `json:"branch"`
-	Locked        bool   `json:"locked"`
-	PullRequestId int    `json:"pull_request_id"`
-	Environment   string `json:"environment"`
+	Name          string   `json:"name"`
+	Cluster       string   `json:"cluster,omitempty"`
+	Repository    string   `json:"repository"`
+	Branch        string   `json:"branch"`
+	Paths         []string `json:"paths,omitempty"`
+	Locked        bool     `json:"locked"`
+	PullRequestId int      `json:"pull_request_id"`
+	Environment   string   `json:"environment"`
 }
 
 // toAppResponse converts a domain Application into its HTTP response form.
 func toAppResponse(app types.Application) AppResponse {
 	return AppResponse{
 		Name:          app.Name,
+		Cluster:       app.Cluster,
 		Repository:    app.Repository,
 		Branch:        app.Branch,
+		Paths:         app.Paths,
 		Locked:        app.Locked,
 		PullRequestId: app.PullRequestId,
 		Environment:   app.Environment,

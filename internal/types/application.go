@@ -5,6 +5,7 @@ package types
 // that return a new copy, with no mutation of the receiver.
 type Application struct {
 	Name          string   // ArgoCD application name
+	Cluster       string   // Cluster this application belongs to (e.g. "tools", "demo")
 	Repository    string   // Git repository URL (e.g. "https://bitbucket.org/org/repo.git")
 	Branch        string   // Current targetRevision set in the ArgoCD spec
 	Paths         []string // File paths this app is responsible for (used for PR matching)

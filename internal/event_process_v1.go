@@ -142,18 +142,20 @@ func applyLock(manager types.AppManager, pr types.PullRequest, apps []types.Appl
 			anyLockedByAnother = true
 			resp.Summary = append(resp.Summary, types.EventAppStatus{
 				Name:    a.Name,
+				Cluster: a.Cluster,
 				Message: fmt.Sprintf("This app is blocked by another pr (%d)", a.PullRequestId),
 			})
 		case a.Locked:
-			resp.Summary = append(resp.Summary, types.EventAppStatus{Name: a.Name, Message: "Locked"})
+			resp.Summary = append(resp.Summary, types.EventAppStatus{Name: a.Name, Cluster: a.Cluster, Message: "Locked"})
 		case a.Branch != pr.DestinationBranch:
 			anyBranchMismatch = true
 			resp.Summary = append(resp.Summary, types.EventAppStatus{
 				Name:    a.Name,
+				Cluster: a.Cluster,
 				Message: fmt.Sprintf("App with branch '%s' dont match with pull request target branch '%s')", a.Branch, pr.DestinationBranch),
 			})
 		default:
-			resp.Summary = append(resp.Summary, types.EventAppStatus{Name: a.Name, Message: "Unlocked"})
+			resp.Summary = append(resp.Summary, types.EventAppStatus{Name: a.Name, Cluster: a.Cluster, Message: "Unlocked"})
 		}
 	}
 
@@ -190,6 +192,7 @@ func applyUnlock(manager types.AppManager, e types.Event, apps []types.Applicati
 		}
 		resp.Summary = append(resp.Summary, types.EventAppStatus{
 			Name:    a.Name,
+			Cluster: a.Cluster,
 			Message: lockedStatus(a.Locked),
 		})
 	}
@@ -206,7 +209,7 @@ func applyUnlock(manager types.AppManager, e types.Event, apps []types.Applicati
 			continue
 		}
 		if err := manager.Unlock(a); err != nil {
-			slog.Error("EventProcess: failed to unlock app", "app", a.Name, "error", err)
+			slog.Error("EventProcess: failed to unlock app", "app", a.Name, "cluster", a.Cluster, "error", err)
 			resp.Success = false
 			resp.Summary[i].Message = "Error at unlock application"
 			return &resp
