@@ -1,7 +1,4 @@
-// Package worker contains long-lived background workers that consume queued items.
-// Each worker is an entry point analogous to an HTTP handler: it reads from a source,
-// runs a use case, and writes a result back to an external system.
-package worker
+package main
 
 import (
 	"context"
@@ -13,21 +10,20 @@ import (
 	"gitbot/internal/types"
 )
 
-// EventProcessor dequeues events and processes them asynchronously.
+// eventProcessor dequeues events and processes them asynchronously.
 // For each item it: enriches via the provider, runs the ProcessFn,
 // and writes the result as a comment on the pull request.
-// Intended to run as a long-lived background goroutine (see Start).
-type EventProcessor struct {
+// Intended to run as a long-lived background goroutine (see start).
+type eventProcessor struct {
 	queue       types.Queue
 	process     types.ProcessFn
 	clusterName string
 	quit        chan struct{}
 }
 
-// NewEventProcessor creates a processor ready to be started.
-// process is typically the function returned by internal.EventProcess.
-func NewEventProcessor(queue types.Queue, process types.ProcessFn, clusterName string) *EventProcessor {
-	return &EventProcessor{
+// newEventProcessor creates a processor ready to be started.
+func newEventProcessor(queue types.Queue, process types.ProcessFn, clusterName string) *eventProcessor {
+	return &eventProcessor{
 		queue:       queue,
 		process:     process,
 		clusterName: clusterName,
@@ -35,11 +31,11 @@ func NewEventProcessor(queue types.Queue, process types.ProcessFn, clusterName s
 	}
 }
 
-// Start begins the processing loop. Must be run in a goroutine.
+// start begins the processing loop. Must be run in a goroutine.
 // Polls the queue every second; for each item it enriches the event via the
 // provider (up to 3 retries), calls the process function, and posts the result
 // as a PR comment.
-func (p *EventProcessor) Start() {
+func (p *eventProcessor) start() {
 	for {
 		select {
 		case <-p.quit:
@@ -60,7 +56,7 @@ func (p *EventProcessor) Start() {
 				if err == nil {
 					break
 				}
-				slog.Warn("EventProcessor: GetData failed, retrying", "attempt", i, "error", err)
+				slog.Warn("eventProcessor: GetData failed, retrying", "attempt", i, "error", err)
 				time.Sleep(1 * time.Second)
 			}
 
@@ -68,7 +64,7 @@ func (p *EventProcessor) Start() {
 
 			// Re-enqueue for app-of-apps double-lock scenario.
 			if resp != nil && retry {
-				slog.Info("EventProcessor: re-enqueueing event for retry")
+				slog.Info("eventProcessor: re-enqueueing event for retry")
 				time.Sleep(30 * time.Second)
 				p.queue.Enqueue(*next)
 			}
@@ -84,15 +80,15 @@ func (p *EventProcessor) Start() {
 				next.Event.CommentId,
 				msg,
 			); err != nil {
-				slog.Error("EventProcessor: failed to write comment", "error", err)
+				slog.Error("eventProcessor: failed to write comment", "error", err)
 			}
 		}
 	}
 }
 
-// Stop drains the queue gracefully and shuts down the processor.
+// stop drains the queue gracefully and shuts down the processor.
 // Blocks until the queue is empty or the context is cancelled.
-func (p *EventProcessor) Stop(ctx context.Context) {
+func (p *eventProcessor) stop(ctx context.Context) {
 	defer close(p.quit)
 	for {
 		select {
@@ -107,18 +103,13 @@ func (p *EventProcessor) Stop(ctx context.Context) {
 	}
 }
 
-// formatResponse builds the PR comment body from an EventResponse.
-func (p *EventProcessor) formatResponse(resp *types.EventResponse) string {
+func (p *eventProcessor) formatResponse(resp *types.EventResponse) string {
 	var msg string
-
 	if p.clusterName != "" {
-		status := ternary(resp.Success, "SUCCESS", "FAILED")
-		msg = fmt.Sprintf("**[%s]** => **%s**\n\n", strings.ToUpper(p.clusterName), status)
+		msg = fmt.Sprintf("**[%s]** => **%s**\n\n", strings.ToUpper(p.clusterName), ternary(resp.Success, "SUCCESS", "FAILED"))
 	} else {
-		status := ternary(resp.Success, "Success", "Failed")
-		msg = fmt.Sprintf("### Status: **%s**", status)
+		msg = fmt.Sprintf("### Status: **%s**", ternary(resp.Success, "Success", "Failed"))
 	}
-
 	if resp.Message != "" {
 		msg += resp.Message + ".  \n"
 	} else {
@@ -126,7 +117,6 @@ func (p *EventProcessor) formatResponse(resp *types.EventResponse) string {
 			msg += fmt.Sprintf("- **%s:** %s.  \n", strings.ToUpper(app.Name), app.Message)
 		}
 	}
-
 	return msg
 }
 

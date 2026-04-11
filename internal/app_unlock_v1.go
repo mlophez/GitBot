@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"gitbot/internal/server"
+	
+	"gitbot/internal/adapters"
 	"gitbot/internal/types"
 )
 
@@ -15,7 +16,7 @@ import (
 func UnlockApp(manager types.AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		log := server.Logger(r.Context())
+		log := adapters.Logger(r.Context())
 
 		log.Info("UnlockApp request received", "app", id)
 

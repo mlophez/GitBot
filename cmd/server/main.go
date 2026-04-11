@@ -11,25 +11,23 @@ import (
 	"time"
 
 	"gitbot/internal"
-	"gitbot/internal/adapter"
-	"gitbot/internal/server"
+	"gitbot/internal/adapters"
 	"gitbot/internal/types"
-	"gitbot/internal/worker"
 )
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
-	c := adapter.NewEnvConfigLoader().Load()
+	c := adapters.NewEnvConfigLoader().Load()
 
 	/* Apps API */
-	appManager := adapter.NewArgoAppManager(c.ClientSet)
+	appManager := adapters.NewArgoAppManager(c.ClientSet)
 
 	/* Providers: Bitbucket, GitHub, GitLab, etc. */
-	bitbucket := adapter.NewBitbucketClient(c.BitbucketBearerToken)
+	bitbucket := adapters.NewBitbucketClient(c.BitbucketBearerToken)
 
 	/* Queue */
-	eventQueue := adapter.NewMemoryQueue[types.QueueItem]()
+	eventQueue := adapters.NewMemoryQueue[types.QueueItem]()
 
 	/* Routes */
 	router := http.NewServeMux()
@@ -41,7 +39,7 @@ func main() {
 	router.HandleFunc("POST /api/v1/apps/{id}/unlock", internal.UnlockApp(appManager))
 
 	/* HTTP server */
-	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: server.RequestID(router)}
+	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: requestID(router)}
 	go func() {
 		slog.Info("Starting server in port :" + c.HttpPort)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -51,8 +49,8 @@ func main() {
 	}()
 
 	/* Event processing */
-	processor := worker.NewEventProcessor(eventQueue, internal.EventProcess(appManager), c.ClusterName)
-	go processor.Start()
+	processor := newEventProcessor(eventQueue, internal.EventProcess(appManager), c.ClusterName)
+	go processor.start()
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -67,7 +65,7 @@ func main() {
 	}
 
 	slog.Info("Shutdown event queue...")
-	processor.Stop(ctx)
+	processor.stop(ctx)
 
 	slog.Info("Server stopped")
 	time.Sleep(3 * time.Second)

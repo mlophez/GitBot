@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"gitbot/internal/server"
+	
+	"gitbot/internal/adapters"
 	"gitbot/internal/types"
 )
 
@@ -21,7 +22,7 @@ type notificationRequest struct {
 // Returns 400 if the body cannot be parsed, 404 if the app is not found.
 func NotificationHandle(manager types.AppManager, provider types.Provider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log := server.Logger(r.Context())
+		log := adapters.Logger(r.Context())
 
 		var body notificationRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

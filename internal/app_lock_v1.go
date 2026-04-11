@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"gitbot/internal/server"
+	
+	"gitbot/internal/adapters"
 	"gitbot/internal/types"
 )
 
@@ -21,7 +22,7 @@ type LockRequest struct {
 func LockApp(manager types.AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		log := server.Logger(r.Context())
+		log := adapters.Logger(r.Context())
 
 		log.Info("LockApp request received", "app", id)
 

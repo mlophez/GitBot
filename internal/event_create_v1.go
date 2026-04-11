@@ -3,7 +3,8 @@ package internal
 import (
 	"net/http"
 
-	"gitbot/internal/server"
+	
+	"gitbot/internal/adapters"
 	"gitbot/internal/types"
 )
 
@@ -13,7 +14,7 @@ import (
 // Returns 400 if the payload cannot be parsed.
 func EventCreate(queue types.Queue, provider types.Provider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log := server.Logger(r.Context())
+		log := adapters.Logger(r.Context())
 		log.Info("EventCreate webhook received")
 
 		e, err := provider.ParseEvent(r.Header, r.Body)

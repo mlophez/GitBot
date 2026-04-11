@@ -9,7 +9,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"gitbot/internal/server"
+	
+	"gitbot/internal/adapters"
 	"gitbot/internal/types"
 )
 
@@ -41,7 +42,7 @@ func toAppResponse(app types.Application) AppResponse {
 // Returns the list of all ArgoCD applications currently tracked in the cluster.
 func ListApps(manager types.AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log := server.Logger(r.Context())
+		log := adapters.Logger(r.Context())
 		log.Info("ListApps request received")
 
 		apps, err := manager.List()
