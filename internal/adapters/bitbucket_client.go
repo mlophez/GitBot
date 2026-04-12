@@ -217,6 +217,10 @@ func (b BitbucketClient) WriteEventResponse(repo string, prId int, parentId int,
 // formatEventResponse renders an EventResponse as a Markdown string suitable for
 // posting as a Bitbucket pull request comment.
 func (b BitbucketClient) formatEventResponse(resp *types.EventResponse, clusterName string) string {
+	if resp.Environments != nil {
+		return bbFormatHelp(resp.Environments)
+	}
+
 	if resp.Message != "" {
 		return fmt.Sprintf("### Status: **%s**\n\n%s.  \n", bbStatus(resp.Success), resp.Message)
 	}
@@ -253,6 +257,30 @@ func (b BitbucketClient) formatEventResponse(resp *types.EventResponse, clusterN
 		msg += "\n"
 	}
 	return msg
+}
+
+func bbFormatHelp(envs []string) string {
+	var envDisplay string
+	if len(envs) == 0 {
+		envDisplay = "_none found_"
+	} else {
+		quoted := make([]string, len(envs))
+		for i, e := range envs {
+			quoted[i] = "`" + e + "`"
+		}
+		envDisplay = strings.Join(quoted, ", ")
+	}
+	return "### GitBot Help\n\n" +
+		"**Available environments:** " + envDisplay + "\n\n" +
+		"**Commands:**\n\n" +
+		"| Command | Description |\n" +
+		"|---------|-------------|\n" +
+		"| `#argo deploy` | Lock apps in all environments |\n" +
+		"| `#argo deploy <env>` | Lock apps in a specific environment |\n" +
+		"| `#argo deploy <env> <app>` | Lock a specific app |\n" +
+		"| `#argo unlock` | Unlock apps in all environments |\n" +
+		"| `#argo unlock <env>` | Unlock apps in a specific environment |\n" +
+		"| `#argo help` | Show this help |\n"
 }
 
 func bbGroupByCluster(apps []types.EventAppStatus) map[string][]types.EventAppStatus {

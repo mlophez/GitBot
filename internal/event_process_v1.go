@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"sort"
 	"strings"
 
 	"gitbot/internal/types"
@@ -15,6 +16,7 @@ type action int
 const (
 	lockAction action = iota
 	unlockAction
+	helpAction
 	unknownAction
 )
 
@@ -33,6 +35,15 @@ func EventProcess(manager types.AppManager) types.ProcessFn {
 		}
 
 		switch act {
+		case helpAction:
+			apps, err := manager.List()
+			if err != nil {
+				slog.Error("EventProcess: failed to list apps", "error", err)
+				return nil, false
+			}
+			envs := uniqueEnvs(filterByRepo(apps, e.Repository))
+			return &types.EventResponse{Environments: envs}, false
+
 		case lockAction:
 			apps, err := manager.List()
 			if err != nil {
@@ -101,11 +112,14 @@ func parseAction(e types.Event) (action, *string, *string) {
 	appname := "all"
 
 	switch e.Type {
+	case types.EventTypeOpened:
+		return helpAction, &env, &appname
+
 	case types.EventTypeDeclined, types.EventTypeMerged:
 		return unlockAction, &env, &appname
 
 	case types.EventTypeCommented:
-		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback)(?: (\w+))?(?: ([- \w]+))?`).
+		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback|help)(?: (\w+))?(?: ([- \w]+))?`).
 			FindStringSubmatch(e.Comment)
 		if len(filter) <= 3 {
 			break
@@ -122,6 +136,8 @@ func parseAction(e types.Event) (action, *string, *string) {
 			return lockAction, &env, &appname
 		case "UNLOCK", "UNDEPLOY", "ROLLBACK":
 			return unlockAction, &env, &appname
+		case "HELP":
+			return helpAction, &env, &appname
 		}
 	}
 
@@ -222,6 +238,36 @@ func applyUnlock(manager types.AppManager, e types.Event, apps []types.Applicati
 	}
 
 	return &resp
+}
+
+// ── Pure helper functions ─────────────────────────────────────────────────────
+
+// filterByRepo returns apps whose repository matches repo.
+func filterByRepo(apps []types.Application, repo string) []types.Application {
+	var result []types.Application
+	for _, a := range apps {
+		if a.Repository == repo {
+			result = append(result, a)
+		}
+	}
+	return result
+}
+
+// uniqueEnvs returns the sorted, deduplicated list of non-empty environments
+// present in the given apps.
+func uniqueEnvs(apps []types.Application) []string {
+	seen := make(map[string]struct{})
+	var envs []string
+	for _, a := range apps {
+		if a.Environment != "" {
+			if _, ok := seen[a.Environment]; !ok {
+				seen[a.Environment] = struct{}{}
+				envs = append(envs, a.Environment)
+			}
+		}
+	}
+	sort.Strings(envs)
+	return envs
 }
 
 // ── Pure filter functions ─────────────────────────────────────────────────────
