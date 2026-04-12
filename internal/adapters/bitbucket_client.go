@@ -2,6 +2,9 @@ package adapters
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"gitbot/internal/types"
@@ -23,6 +26,27 @@ func NewBitbucketClient(token string) *BitbucketClient {
 	return &BitbucketClient{
 		bearerToken: token,
 	}
+}
+
+// ValidateWebhookToken verifies the HMAC-SHA256 signature that Bitbucket includes
+// in the X-Hub-Signature header (format: "sha256=<hex>").
+// Returns nil when secret is empty (validation disabled) or the signature matches.
+// Returns an error if the header is missing or the signature does not match.
+func (b BitbucketClient) ValidateWebhookToken(secret string, headers http.Header, body []byte) error {
+	if secret == "" {
+		return nil
+	}
+	sig := headers.Get("X-Hub-Signature")
+	if sig == "" {
+		return fmt.Errorf("missing X-Hub-Signature header")
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(sig), []byte(expected)) {
+		return fmt.Errorf("webhook signature mismatch")
+	}
+	return nil
 }
 
 // ParseEvent parses a Bitbucket webhook request into a types.Event.

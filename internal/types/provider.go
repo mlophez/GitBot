@@ -9,6 +9,12 @@ import (
 // It handles webhook parsing, event enrichment, and writing comments back to PRs.
 // Implemented by adapter.BitbucketProvider.
 type Provider interface {
+	// ValidateWebhookToken verifies the webhook signature sent by the provider.
+	// secret is the shared token configured via WEBHOOK_TOKEN.
+	// body is the raw request body, needed for HMAC-based validation.
+	// Returns nil if validation passes or if secret is empty.
+	ValidateWebhookToken(secret string, headers http.Header, body []byte) error
+
 	// ParseEvent reads the raw HTTP webhook and returns a structured Event.
 	ParseEvent(headers http.Header, body io.ReadCloser) (Event, error)
 

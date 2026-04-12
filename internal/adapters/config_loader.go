@@ -59,6 +59,7 @@ func (l *EnvConfigLoader) Load() *types.Config {
 		SecurityRules:         rules,
 		HttpPort:              os.Getenv("HTTP_PORT"),
 		ContextRoot:           os.Getenv("CONTEXT_ROOT"),
+		WebhookToken:          os.Getenv("WEBHOOK_TOKEN"),
 		BitbucketBearerToken:  os.Getenv("BITBUCKET_BEARER_TOKEN"),
 		ClusterName:           os.Getenv("CLUSTER_NAME"),
 		ClientSet:             newKubernetesClient(),
