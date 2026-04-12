@@ -34,7 +34,7 @@ func main() {
 
 	/* Routes */
 	router := http.NewServeMux()
-	router.HandleFunc("GET /status", internal.Status)
+	router.HandleFunc("GET /api/v1/status", internal.Status)
 	router.HandleFunc("POST /api/v1/webhook/bitbucket", internal.EventCreate(eventQueue, bitbucket))
 	router.HandleFunc("POST /api/v1/notification", internal.NotificationHandle(appManager, bitbucket))
 	router.HandleFunc("GET /api/v1/apps", internal.ListApps(appManager))
