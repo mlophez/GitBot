@@ -208,6 +208,88 @@ func (b BitbucketClient) WriteComment(repo string, prId int, parentId int, msg s
 	return nil
 }
 
+// WriteEventResponse formats resp as a Markdown comment and posts it on the pull request.
+// clusterName is used as a fallback display label when apps carry no cluster information.
+func (b BitbucketClient) WriteEventResponse(repo string, prId int, parentId int, resp *types.EventResponse, clusterName string) error {
+	return b.WriteComment(repo, prId, parentId, b.formatEventResponse(resp, clusterName))
+}
+
+// formatEventResponse renders an EventResponse as a Markdown string suitable for
+// posting as a Bitbucket pull request comment.
+func (b BitbucketClient) formatEventResponse(resp *types.EventResponse, clusterName string) string {
+	if resp.Message != "" {
+		return fmt.Sprintf("### Status: **%s**\n\n%s.  \n", bbStatus(resp.Success), resp.Message)
+	}
+
+	grouped := bbGroupByCluster(resp.Summary)
+
+	// Single cluster (or no cluster tag): compact header.
+	if len(grouped) <= 1 {
+		name := clusterName
+		for k := range grouped {
+			if k != "" {
+				name = k
+			}
+		}
+		var msg string
+		if name != "" {
+			msg = fmt.Sprintf("**[%s]** => **%s**\n\n", strings.ToUpper(name), bbStatusUpper(resp.Success))
+		} else {
+			msg = fmt.Sprintf("### Status: **%s**\n\n", bbStatus(resp.Success))
+		}
+		for _, app := range resp.Summary {
+			msg += fmt.Sprintf("- **%s:** %s.  \n", strings.ToUpper(app.Name), app.Message)
+		}
+		return msg
+	}
+
+	// Multiple clusters: one section per cluster.
+	var msg string
+	for _, name := range bbSortedKeys(grouped) {
+		msg += fmt.Sprintf("**[%s]** => **%s**\n\n", strings.ToUpper(name), bbStatusUpper(resp.Success))
+		for _, app := range grouped[name] {
+			msg += fmt.Sprintf("- **%s:** %s.  \n", strings.ToUpper(app.Name), app.Message)
+		}
+		msg += "\n"
+	}
+	return msg
+}
+
+func bbGroupByCluster(apps []types.EventAppStatus) map[string][]types.EventAppStatus {
+	result := make(map[string][]types.EventAppStatus)
+	for _, a := range apps {
+		result[a.Cluster] = append(result[a.Cluster], a)
+	}
+	return result
+}
+
+func bbSortedKeys(m map[string][]types.EventAppStatus) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	return keys
+}
+
+func bbStatus(success bool) string {
+	if success {
+		return "Success"
+	}
+	return "Failed"
+}
+
+func bbStatusUpper(success bool) string {
+	if success {
+		return "SUCCESS"
+	}
+	return "FAILED"
+}
+
 // CompareBranchCommitTotal returns the number of commits that exclude is behind include.
 func (b BitbucketClient) CompareBranchCommitTotal(repository string, include string, exclude string) (int, error) {
 	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/commits?include=%s&exclude=%s", b.getSlug(repository), include, exclude)

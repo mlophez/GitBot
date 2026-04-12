@@ -25,4 +25,9 @@ type Provider interface {
 	// WriteComment posts a comment on the pull request. If parentId > 0 the comment
 	// is posted as a reply to that comment thread.
 	WriteComment(repo string, prId int, parentId int, msg string) error
+
+	// WriteEventResponse formats resp into a provider-specific comment and posts it
+	// on the pull request. clusterName is used as a display label when the response
+	// does not carry cluster information (single-cluster deployments).
+	WriteEventResponse(repo string, prId int, parentId int, resp *EventResponse, clusterName string) error
 }
