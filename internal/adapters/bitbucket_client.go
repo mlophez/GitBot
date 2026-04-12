@@ -270,7 +270,8 @@ func bbFormatHelp(envs []string) string {
 		}
 		envDisplay = strings.Join(quoted, ", ")
 	}
-	return "### GitBot Help\n\n" +
+	return "### KubeOps Help\n\n" +
+		"This PR lifecycle is managed by KubeOps, a GitOps bot that locks and unlocks ArgoCD applications based on pull request activity. " +
 		"**Available environments:** " + envDisplay + "\n\n" +
 		"**Commands:**\n\n" +
 		"| Command | Description |\n" +
@@ -362,9 +363,9 @@ type bpWebhookRequest struct {
 		FullName string `json:"full_name"`
 	} `json:"repository"`
 	PullRequest struct {
-		Id    int    `json:"id"`
-		Title string `json:"title"`
-		State string `json:"state"`
+		Id     int    `json:"id"`
+		Title  string `json:"title"`
+		State  string `json:"state"`
 		Source struct {
 			Branch struct {
 				Name string `json:"name"`
