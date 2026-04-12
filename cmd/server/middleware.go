@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"gitbot/internal/adapters"
 )
@@ -21,6 +22,25 @@ func requestID(next http.Handler) http.Handler {
 		ctx := adapters.WithRequestID(r.Context(), id)
 		w.Header().Set("X-Request-ID", id)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// apiTokenAuth is a middleware that enforces Bearer token authentication on every
+// request. When token is empty the middleware is a no-op (development / backward compat).
+// Returns 401 if the Authorization header is missing or does not match.
+func apiTokenAuth(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		const prefix = "Bearer "
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, prefix) || auth[len(prefix):] != token {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

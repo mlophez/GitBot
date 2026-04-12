@@ -33,13 +33,15 @@ func main() {
 	eventQueue := adapters.NewMemoryQueue[types.QueueItem]()
 
 	/* Routes */
+	protected := func(h http.Handler) http.Handler { return apiTokenAuth(c.APIToken, h) }
+
 	router := http.NewServeMux()
 	router.HandleFunc("GET /api/v1/status", internal.Status)
 	router.HandleFunc("POST /api/v1/webhook/bitbucket", internal.EventCreate(eventQueue, bitbucket, c.WebhookToken))
-	router.HandleFunc("POST /api/v1/notification", internal.NotificationHandle(appManager, bitbucket))
-	router.HandleFunc("GET /api/v1/apps", internal.ListApps(appManager))
-	router.HandleFunc("POST /api/v1/apps/{id}/lock", internal.LockApp(appManager))
-	router.HandleFunc("POST /api/v1/apps/{id}/unlock", internal.UnlockApp(appManager))
+	router.Handle("POST /api/v1/notification", protected(internal.NotificationHandle(appManager, bitbucket)))
+	router.Handle("GET /api/v1/apps", protected(internal.ListApps(appManager)))
+	router.Handle("POST /api/v1/apps/{id}/lock", protected(internal.LockApp(appManager)))
+	router.Handle("POST /api/v1/apps/{id}/unlock", protected(internal.UnlockApp(appManager)))
 	router.HandleFunc("POST /api/v1/admission/apps/validate", internal.ValidateApp(c.BotKubernetesUsername))
 
 	/* HTTP server */
@@ -108,7 +110,7 @@ func buildAppManager(c *types.Config, local types.AppManager) types.AppManager {
 
 	// Register each remote agent cluster.
 	for _, cl := range remotes {
-		multi.Add(cl.Name, adapters.NewRemoteAppManager(cl.Auth.URL, cl.Name, cl.Auth.InsecureSkipTLSVerify))
+		multi.Add(cl.Name, adapters.NewRemoteAppManager(cl.Auth.URL, cl.Name, cl.Auth.InsecureSkipTLSVerify, c.APIToken))
 	}
 
 	return multi

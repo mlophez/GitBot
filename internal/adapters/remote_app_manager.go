@@ -18,14 +18,16 @@ import (
 type RemoteAppManager struct {
 	baseURL     string
 	clusterName string
+	apiToken    string
 	client      *http.Client
 }
 
 // NewRemoteAppManager creates a RemoteAppManager that talks to the agent at baseURL.
 // clusterName is stamped on every Application returned by List.
+// apiToken is sent as a Bearer token on every outgoing request; pass an empty string to disable.
 // When insecureSkipTLSVerify is true the HTTP client skips certificate validation —
 // use only in non-production environments.
-func NewRemoteAppManager(baseURL, clusterName string, insecureSkipTLSVerify bool) types.AppManager {
+func NewRemoteAppManager(baseURL, clusterName string, insecureSkipTLSVerify bool, apiToken string) types.AppManager {
 	transport := http.DefaultTransport
 	if insecureSkipTLSVerify {
 		transport = &http.Transport{
@@ -35,8 +37,25 @@ func NewRemoteAppManager(baseURL, clusterName string, insecureSkipTLSVerify bool
 	return &RemoteAppManager{
 		baseURL:     baseURL,
 		clusterName: clusterName,
+		apiToken:    apiToken,
 		client:      &http.Client{Timeout: 10 * time.Second, Transport: transport},
 	}
+}
+
+// newRequest builds an HTTP request with the Content-Type and Authorization headers
+// pre-set when an API token is configured.
+func (r *RemoteAppManager) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if r.apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+r.apiToken)
+	}
+	return req, nil
 }
 
 // remoteAppResponse mirrors the JSON shape returned by the agent's GET /api/v1/apps.
@@ -60,7 +79,12 @@ type remoteLockRequest struct {
 // List fetches all applications from the remote agent and returns them
 // with the Cluster field set to the configured cluster name.
 func (r *RemoteAppManager) List() ([]types.Application, error) {
-	resp, err := r.client.Get(r.baseURL + "/api/v1/apps")
+	req, err := r.newRequest(http.MethodGet, r.baseURL+"/api/v1/apps", nil)
+	if err != nil {
+		return nil, fmt.Errorf("remote agent %q: failed to build request: %w", r.clusterName, err)
+	}
+
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
 	}
@@ -100,7 +124,12 @@ func (r *RemoteAppManager) Lock(app types.Application, targetBranch string, prID
 	}
 
 	url := fmt.Sprintf("%s/api/v1/apps/%s/lock", r.baseURL, app.Name)
-	resp, err := r.client.Post(url, "application/json", bytes.NewReader(body))
+	req, err := r.newRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("remote agent %q: failed to build request: %w", r.clusterName, err)
+	}
+
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
 	}
@@ -116,7 +145,12 @@ func (r *RemoteAppManager) Lock(app types.Application, targetBranch string, prID
 // Unlock tells the remote agent to unlock the application.
 func (r *RemoteAppManager) Unlock(app types.Application) error {
 	url := fmt.Sprintf("%s/api/v1/apps/%s/unlock", r.baseURL, app.Name)
-	resp, err := r.client.Post(url, "application/json", nil)
+	req, err := r.newRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return fmt.Errorf("remote agent %q: failed to build request: %w", r.clusterName, err)
+	}
+
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("remote agent %q unreachable: %w", r.clusterName, err)
 	}
