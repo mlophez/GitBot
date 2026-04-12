@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
 
 	"gitbot/internal/types"
@@ -18,7 +17,6 @@ import (
 // manage ArgoCD applications on remote clusters.
 type RemoteAppManager struct {
 	baseURL     string
-	hostname    string // hostname without port, used as explicit Host header
 	clusterName string
 	client      *http.Client
 }
@@ -35,18 +33,8 @@ func NewRemoteAppManager(baseURL, clusterName string, insecureSkipTLSVerify bool
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // intentional, user-configured
 	}
 
-	// Extract the hostname without port. If the URL contains an explicit default
-	// port (e.g. https://host:443/...), url.Host would be "host:443", causing Go
-	// to send "Host: host:443". HAProxy ACLs typically match without the port, so
-	// we always use Hostname() to strip it.
-	hostname := ""
-	if parsed, err := url.Parse(baseURL); err == nil {
-		hostname = parsed.Hostname()
-	}
-
 	return &RemoteAppManager{
 		baseURL:     baseURL,
-		hostname:    hostname,
 		clusterName: clusterName,
 		client:      &http.Client{Timeout: 10 * time.Second, Transport: transport},
 	}
@@ -70,19 +58,11 @@ type remoteLockRequest struct {
 	PullRequestId int    `json:"pull_request_id"`
 }
 
-// newRequest builds an HTTP request with req.Host set explicitly to the
-// bare hostname (no port). This ensures HAProxy — which typically matches
-// ACLs on hostname without port — receives the correct Host header even
-// when the configured URL contains an explicit default port (e.g. :443).
-func (r *RemoteAppManager) newRequest(method, rawURL string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(method, rawURL, body)
-	if err != nil {
-		return nil, err
-	}
-	if r.hostname != "" {
-		req.Host = r.hostname
-	}
-	return req, nil
+// newRequest builds an HTTP request with an explicit Host header derived from
+// the base URL. This prevents the Host header from being empty when the request
+// passes through a reverse proxy (e.g. HAProxy) that requires it for routing.
+func (r *RemoteAppManager) newRequest(method, url string, body io.Reader) (*http.Request, error) {
+	return http.NewRequest(method, url, body)
 }
 
 // List fetches all applications from the remote agent and returns them
