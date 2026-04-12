@@ -43,9 +43,13 @@ func main() {
 	router.HandleFunc("POST /api/v1/admission/apps/validate", internal.ValidateApp(c.BotKubernetesUsername))
 
 	/* HTTP server */
-	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: requestID(router)}
+	var handler http.Handler = requestID(router)
+	if c.ContextRoot != "" {
+		handler = http.StripPrefix(c.ContextRoot, handler)
+	}
+	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: handler}
 	go func() {
-		slog.Info("Starting server in port :" + c.HttpPort)
+		slog.Info("Starting server", "port", c.HttpPort, "contextRoot", c.ContextRoot)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("Error starting server", "error", err)
 			os.Exit(1)

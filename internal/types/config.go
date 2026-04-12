@@ -20,6 +20,7 @@ type ClusterConfig struct {
 // Config holds the runtime configuration for the server.
 type Config struct {
 	HttpPort              string
+	ContextRoot           string // Optional URL path prefix for all routes (CONTEXT_ROOT env var)
 	SecurityRules         []SecurityRule
 	BitbucketBearerToken  string
 	ClientSet             *kubernetes.Clientset
