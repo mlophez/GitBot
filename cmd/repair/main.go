@@ -1,3 +1,5 @@
+// Package main is a stub utility for reconciling ArgoCD application state.
+// This is a work in progress and not yet functional.
 package main
 
 import (

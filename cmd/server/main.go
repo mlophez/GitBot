@@ -1,3 +1,6 @@
+// Package main is the entrypoint for the kubeops-agent HTTP server.
+// It wires all dependencies (config, adapters, queue, routes) and starts
+// the HTTP server and event-processing loop.
 package main
 
 import (

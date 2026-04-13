@@ -1,3 +1,7 @@
+// Package adapters contains infrastructure implementations of the interfaces defined in types.
+// Each adapter translates between the external world (Kubernetes API, Bitbucket API, HTTP, etc.)
+// and the domain types. Adapters must not contain business logic or make domain decisions —
+// they only perform I/O and map external representations to and from domain types.
 package adapters
 
 import (
@@ -34,6 +38,8 @@ func NewArgoAppManager(cs *kubernetes.Clientset, clusterName string) types.AppMa
 	return &ArgoAppManager{clientset: cs, clusterName: clusterName}
 }
 
+// List returns all ArgoCD Application resources found in the argocd namespace,
+// with the Cluster field set to the configured cluster name.
 func (a *ArgoAppManager) List() ([]types.Application, error) {
 	data, err := a.clientset.RESTClient().Get().
 		AbsPath("/apis/argoproj.io/v1alpha1/applications").
@@ -56,11 +62,13 @@ func (a *ArgoAppManager) List() ([]types.Application, error) {
 	return apps, nil
 }
 
+// Lock points the ArgoCD application at targetBranch and records prID as the lock holder.
 func (a *ArgoAppManager) Lock(app types.Application, targetBranch string, prID int) error {
 	locked := app.Lock(targetBranch, prID)
 	return a.update(locked)
 }
 
+// Unlock restores the application to its pre-lock branch and removes the lock annotations.
 func (a *ArgoAppManager) Unlock(app types.Application) error {
 	unlocked := app.Unlock()
 	if err := a.update(unlocked); err != nil {

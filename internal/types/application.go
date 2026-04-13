@@ -1,3 +1,7 @@
+// Package types contains the pure domain types and interfaces for kubeops-agent.
+// It defines the core data structures (Application, Event, PullRequest) and the
+// contracts (AppManager, Provider, ConfigLoader, Queue) implemented by adapters.
+// This package has no external dependencies and no I/O — it is the pure core of the system.
 package types
 
 // Application represents an ArgoCD application tracked by the bot.

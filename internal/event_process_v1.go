@@ -310,6 +310,8 @@ func filterByRepoAndFiles(apps []types.Application, repo string, files []string)
 	return result
 }
 
+// matchByRepoAndFiles reports whether any of the changed files falls under one
+// of the application's registered paths in the given repository.
 func matchByRepoAndFiles(a types.Application, repo string, files []string) bool {
 	if a.Repository != repo {
 		return false
@@ -324,6 +326,8 @@ func matchByRepoAndFiles(a types.Application, repo string, files []string) bool 
 	return false
 }
 
+// normalizePath canonicalises a file or directory path so that prefix-matching works
+// correctly regardless of leading "./" or missing leading/trailing slash variants.
 func normalizePath(path string) string {
 	if len(path) > 1 && path[0] == '.' && path[1] == '/' {
 		path = strings.TrimPrefix(path, ".")
@@ -337,6 +341,7 @@ func normalizePath(path string) string {
 	return path
 }
 
+// lockedStatus returns the human-readable lock state for use in response messages.
 func lockedStatus(locked bool) string {
 	if locked {
 		return "Locked"
