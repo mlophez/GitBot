@@ -76,46 +76,38 @@ If you find yourself writing an `if` in an adapter that decides whether somethin
 
 ```
 cmd/
-  server/main.go      # HTTP server entrypoint. Wires all dependencies.
-  repair/main.go      # Utility to reconcile app state (in progress).
+  server/main.go            # HTTP server entrypoint. Wires all dependencies.
+  server/middleware.go      # requestID and apiTokenAuth middleware.
+  server/event_processor.go # Background worker: dequeues events, enriches, processes, writes comments.
+  repair/main.go            # Utility to reconcile app state (stub, not functional).
 
 internal/             # Use cases (imperative shell) — package "internal"
                       # One file per use case, named {domain}_{action}_{version}.go
-  app_list_v1.go      # GET  /api/v1/apps            — list all ArgoCD apps
-  app_lock_v1.go      # POST /api/v1/apps/{id}/lock   — lock an app to a PR branch
-  app_unlock_v1.go    # POST /api/v1/apps/{id}/unlock — unlock and restore branch
+  app_list_v1.go            # GET  /api/v1/apps                    — list all ArgoCD apps
+  app_lock_v1.go            # POST /api/v1/apps/{id}/lock           — lock an app to a PR branch
+  app_unlock_v1.go          # POST /api/v1/apps/{id}/unlock         — unlock and restore branch
+  app_validate_v1.go        # POST /api/v1/admission/apps/validate  — Kubernetes admission webhook
+  event_create_v1.go        # POST /api/v1/webhook/bitbucket        — parse webhook, enqueue event
+  event_process_v1.go       # Pure core: parseAction, applyLock, applyUnlock + filter helpers
+  notification_handle_v1.go # POST /api/v1/notification             — ArgoCD deployment notifications
+  status_v1.go              # GET  /api/v1/status                   — health check
 
   types/              # Pure domain — no external dependencies, no I/O
-    application.go    # Application type + methods: Lock(), Unlock(), Sanitize()
+    application.go          # Application type + methods: Lock(), Unlock(), Sanitize()
     application_manager.go  # AppManager interface: List, Lock, Unlock
+    event.go                # EventType, Event, PullRequest, QueueItem, SecurityRule, EventResponse
+    provider.go             # Provider interface: ValidateWebhookToken, ParseEvent, GetData, WriteComment, WriteEventResponse
+    queue.go                # Queue interface
+    config.go               # Config, ClusterConfig, ClusterAuth, ConfigLoader interface
 
-  adapter/            # Infrastructure implementations of types interfaces
-    argocd.go         # ArgoAppManager: implements AppManager against Kubernetes API
-
-  app/                # Legacy: Application domain (ArgoCD apps) — to be migrated
-    domain.go         # Application struct
-    usecase.go        # Pure functions: lockApp, unlockApp, filterAppByRepoAndFiles
-    service.go        # Service: orchestrates pure fns + repository calls
-    argocd.go         # KubeRepository: talks to Kubernetes API to CRUD ArgoCD CRDs
-
-  event/              # Event processing pipeline
-    event.go          # EventType enum and Event struct
-    domain.go         # PullRequest, QueueItem, Queue/Provider interfaces, SecurityRule
-    service.go        # Service.Process(): determines action, validates PR, calls app service
-    handler.go        # HTTP handler: parses webhook, enqueues item
-    worker.go         # Worker: dequeues, enriches event, calls service, writes comment
-    provider/
-      bitbucket.go    # BitbucketProvider: parses webhooks, fetches diff/commits, writes comments
-
-  event/queue/
-    memory.go         # Generic thread-safe in-memory queue
-
-  config/
-    service.go        # Loads config from env + YAML, initializes k8s clientset
-    file.go           # ConfigFile YAML schema + validation + conversion to SecurityRule[]
-
-  notification/
-    notification.go   # HTTP handler for deployment status notifications from ArgoCD
+  adapters/           # Infrastructure implementations of types interfaces
+    argocd.go               # ArgoAppManager: implements AppManager against Kubernetes API
+    bitbucket_client.go     # BitbucketClient: implements Provider for Bitbucket webhooks
+    config_loader.go        # EnvConfigLoader: loads env.ini + optional config.yaml
+    logger.go               # Structured logger helpers (request ID injection)
+    multi_cluster_app_manager.go  # MultiClusterAppManager: aggregates per-cluster backends
+    queue_memory.go         # MemoryQueue: generic thread-safe in-memory queue
+    remote_app_manager.go   # RemoteAppManager: delegates to a remote GitBot agent via HTTP
 
 pkg/
   utils/utils.go      # Generic helpers: contains(), IFTernary()
