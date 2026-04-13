@@ -29,6 +29,7 @@ type Config struct {
 	ClusterName           string
 	Clusters              []ClusterConfig // Parsed from config.yaml clusters section
 	BotKubernetesUsername string          // Kubernetes username of the bot service account (BOT_KUBERNETES_USERNAME)
+	BitbucketBotUUID      string          // Bitbucket UUID of the bot account used to post comments (BITBUCKET_BOT_UUID)
 }
 
 // ConfigLoader abstracts loading the server configuration from an external source.

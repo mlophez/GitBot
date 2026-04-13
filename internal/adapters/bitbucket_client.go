@@ -18,13 +18,17 @@ import (
 // It parses incoming webhook payloads, enriches events with diff and commit data,
 // and writes comments back to pull requests via the Bitbucket REST API.
 type BitbucketClient struct {
-	bearerToken string
+	bearerToken  string
+	botActorUUID string // UUID of the bot's own Bitbucket account; events from this actor are ignored
 }
 
 // NewBitbucketClient creates a BitbucketClient authenticated with the given bearer token.
-func NewBitbucketClient(token string) *BitbucketClient {
+// botActorUUID is optional: when non-empty, webhook events authored by that UUID are
+// discarded so the bot does not react to its own comments.
+func NewBitbucketClient(token string, botActorUUID string) *BitbucketClient {
 	return &BitbucketClient{
-		bearerToken: token,
+		bearerToken:  token,
+		botActorUUID: botActorUUID,
 	}
 }
 
@@ -50,6 +54,7 @@ func (b BitbucketClient) ValidateWebhookToken(secret string, headers http.Header
 }
 
 // ParseEvent parses a Bitbucket webhook request into a types.Event.
+// Sets BotGenerated to true when the actor UUID matches the configured bot account.
 // Returns an error if the request body cannot be decoded.
 func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (types.Event, error) {
 	var webhook bpWebhookRequest
@@ -60,8 +65,10 @@ func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (ty
 		return e, err
 	}
 
+	e.BotGenerated = b.botActorUUID != "" && webhook.Actor.UUID == b.botActorUUID
 	e.Repository = fmt.Sprintf("https://bitbucket.org/%s.git", webhook.Repository.FullName)
-	e.Author = webhook.Actor.UUID
+	e.ActorID = webhook.Actor.UUID
+	e.ActorName = webhook.Actor.DisplayName
 	e.PullRequest.Id = webhook.PullRequest.Id
 	e.PullRequest.SourceBranch = webhook.PullRequest.Source.Branch.Name
 	e.PullRequest.DestinationBranch = webhook.PullRequest.Destination.Branch.Name
@@ -271,7 +278,7 @@ func bbFormatHelp(envs []string) string {
 		envDisplay = strings.Join(quoted, ", ")
 	}
 	return "### KubeOps Help\n\n" +
-		"This PR lifecycle is managed by KubeOps, a GitOps bot that locks and unlocks ArgoCD applications based on pull request activity. " +
+		"This PR lifecycle is managed by KubeOps, a GitOps bot that locks and unlocks ArgoCD applications based on pull request activity. " + "\n\n" +
 		"**Available environments:** " + envDisplay + "\n\n" +
 		"**Commands:**\n\n" +
 		"| Command | Description |\n" +
@@ -392,7 +399,8 @@ type bpWebhookRequest struct {
 		} `json:"content"`
 	} `json:"comment"`
 	Actor struct {
-		UUID string `json:"uuid"`
+		UUID        string `json:"uuid"`
+		DisplayName string `json:"display_name"`
 	} `json:"actor"`
 }
 

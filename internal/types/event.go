@@ -16,11 +16,13 @@ const (
 type Event struct {
 	Type          EventType
 	Repository    string
-	Author        string
+	ActorID       string
+	ActorName     string
 	Comment       string
 	CommentId     int
 	PullRequest   PullRequest
 	PullRequestID int
+	BotGenerated  bool // true when the event was triggered by the bot's own account
 }
 
 // PullRequest contains the state of a pull request at the time an event was received.

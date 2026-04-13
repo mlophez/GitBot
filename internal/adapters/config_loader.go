@@ -66,6 +66,7 @@ func (l *EnvConfigLoader) Load() *types.Config {
 		ClientSet:             newKubernetesClient(),
 		Clusters:              clusters,
 		BotKubernetesUsername: os.Getenv("BOT_KUBERNETES_USERNAME"),
+		BitbucketBotUUID:      os.Getenv("BITBUCKET_BOT_UUID"),
 	}
 }
 

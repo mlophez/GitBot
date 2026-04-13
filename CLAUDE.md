@@ -61,6 +61,17 @@ The codebase follows the **Pure Core / Imperative Shell** pattern:
 - **Use cases** are in `service.go` per package. Each use case: fetch data → call pure function → persist result.
 - **No dependency injection frameworks.** Wire dependencies manually in `cmd/server/main.go`.
 
+### Adapters are translators, not decision-makers
+
+Every adapter in `internal/adapters/` is a struct that implements one of the interfaces defined in `internal/types/` (e.g. `Provider`, `AppManager`, `Queue`). Their only job is to translate between the external world (HTTP, Kubernetes API, Bitbucket API, etc.) and the domain types. They must not contain business logic or decisions.
+
+- **Allowed in adapters:** parsing payloads, serialising responses, making API calls, mapping external structs to domain types, setting observable facts on the event (e.g. `BotGenerated = true`).
+- **Not allowed in adapters:** deciding what action to take, filtering events based on business rules, enforcing policy, branching on domain state.
+
+If you find yourself writing an `if` in an adapter that decides whether something *should happen*, move that decision to a use case or a pure function in `internal/types/`.
+
+**Why this matters:** adapters are swapped out (Bitbucket → GitHub, ArgoCD → FluxCD). Logic placed in an adapter must be re-implemented for every new provider. Logic placed in the use case is inherited automatically.
+
 ## Directory Structure
 
 ```
