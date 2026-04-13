@@ -288,6 +288,7 @@ func bbFormatHelp(envs []string) string {
 		"| `#argo deploy <env> <app>` | Lock a specific app |\n" +
 		"| `#argo rollback` | Unlock apps in all environments |\n" +
 		"| `#argo rollback <env>` | Unlock apps in a specific environment |\n" +
+		"| `#argo rollback <env> <app>` | Unlock a specific app |\n" +
 		"| `#argo help` | Show this help |\n"
 }
 
