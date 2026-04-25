@@ -1,4 +1,4 @@
-package types
+package event
 
 // Queue is the interface for the event processing queue.
 // Implemented by queue.MemoryQueue for in-memory use.

@@ -1,4 +1,4 @@
-package adapters
+package config
 
 import (
 	"fmt"
@@ -11,12 +11,11 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"gitbot/internal/types"
 )
 
 const kubeconfig = "/home/mlr/Documents/Code/gitbot/kubeconfig"
 
-// EnvConfigLoader implements types.ConfigLoader.
+// EnvConfigLoader implements ConfigLoader.
 // It loads configuration from environment variables (via env.ini) and an optional YAML config file.
 type EnvConfigLoader struct{}
 
@@ -28,13 +27,13 @@ func NewEnvConfigLoader() *EnvConfigLoader {
 // Load reads environment variables from env.ini, parses the optional config.yaml
 // for cluster definitions and security rules, and returns a populated Config.
 // Panics if the env file cannot be loaded or the Kubernetes clientset cannot be created.
-func (l *EnvConfigLoader) Load() *types.Config {
+func (l *EnvConfigLoader) Load() *Config {
 	if err := godotenv.Load("env.ini"); err != nil {
 		panic("Error loading env.ini: " + err.Error())
 	}
 
-	var clusters []types.ClusterConfig
-	var rules []types.SecurityRule
+	var clusters []ClusterConfig
+	var rules []SecurityRule
 
 	if filepath := os.Getenv("CONFIG_FILE"); filepath != "" {
 		data, err := os.ReadFile(filepath)
@@ -55,7 +54,7 @@ func (l *EnvConfigLoader) Load() *types.Config {
 		}
 	}
 
-	return &types.Config{
+	return &Config{
 		SecurityRules:         rules,
 		HttpPort:              os.Getenv("HTTP_PORT"),
 		ContextRoot:           os.Getenv("CONTEXT_ROOT"),
@@ -117,12 +116,12 @@ type configFile struct {
 }
 
 // clusterConfigs converts the YAML cluster definitions into domain ClusterConfig values.
-func (c configFile) clusterConfigs() []types.ClusterConfig {
-	var result []types.ClusterConfig
+func (c configFile) clusterConfigs() []ClusterConfig {
+	var result []ClusterConfig
 	for _, cl := range c.Clusters {
-		result = append(result, types.ClusterConfig{
+		result = append(result, ClusterConfig{
 			Name: cl.Name,
-			Auth: types.ClusterAuth{
+			Auth: ClusterAuth{
 				Type:                cl.Auth.Type,
 				URL:                 cl.Auth.URL,
 				InsecureSkipTLSVerify: cl.Auth.InsecureSkipTLSVerify,
@@ -169,8 +168,8 @@ func (c configFile) validate() error {
 	return nil
 }
 
-func (c configFile) securityRules() []types.SecurityRule {
-	var result []types.SecurityRule
+func (c configFile) securityRules() []SecurityRule {
+	var result []SecurityRule
 	for _, r := range c.Security.Rules {
 		users := append([]string{}, r.UserList...)
 		for _, groupName := range r.GroupList {
@@ -180,7 +179,7 @@ func (c configFile) securityRules() []types.SecurityRule {
 				}
 			}
 		}
-		result = append(result, types.SecurityRule{
+		result = append(result, SecurityRule{
 			Repository:   r.Repository,
 			FilePatterns: r.FilePatternList,
 			Actions:      r.ActionList,

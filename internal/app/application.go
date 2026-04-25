@@ -1,8 +1,8 @@
-// Package types contains the pure domain types and interfaces for kubeops-agent.
-// It defines the core data structures (Application, Event, PullRequest) and the
-// contracts (AppManager, Provider, ConfigLoader, Queue) implemented by adapters.
-// This package has no external dependencies and no I/O — it is the pure core of the system.
-package types
+// Package app is the vertical slice for ArgoCD application management.
+// It contains the pure domain (Application, AppManager), the adapters that
+// implement the manager against Kubernetes/ArgoCD (local, multi-cluster, remote),
+// and the use cases exposed via HTTP (list, lock, unlock, validate).
+package app
 
 // Application represents an ArgoCD application tracked by the bot.
 // It is a pure value type — all state transitions are done via methods

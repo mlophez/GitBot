@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"gitbot/internal/types"
+	"gitbot/internal/event"
 )
 
 // eventProcessor dequeues events and processes them asynchronously.
@@ -13,14 +13,14 @@ import (
 // and writes the result as a comment on the pull request.
 // Intended to run as a long-lived background goroutine (see start).
 type eventProcessor struct {
-	queue       types.Queue
-	process     types.ProcessFn
+	queue       event.Queue
+	process     event.ProcessFn
 	clusterName string
 	quit        chan struct{}
 }
 
 // newEventProcessor creates a processor ready to be started.
-func newEventProcessor(queue types.Queue, process types.ProcessFn, clusterName string) *eventProcessor {
+func newEventProcessor(queue event.Queue, process event.ProcessFn, clusterName string) *eventProcessor {
 	return &eventProcessor{
 		queue:       queue,
 		process:     process,
@@ -47,7 +47,7 @@ func (p *eventProcessor) start() {
 			}
 
 			// Enrich event with files changed and commits behind — retry up to 3 times.
-			var e types.Event
+			var e event.Event
 			for i := 1; i <= 3; i++ {
 				var err error
 				e, err = next.Provider.GetData(next.Event)
@@ -100,4 +100,3 @@ func (p *eventProcessor) stop(ctx context.Context) {
 		}
 	}
 }
-

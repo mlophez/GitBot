@@ -1,8 +1,4 @@
-// Package adapters contains infrastructure implementations of the interfaces defined in types.
-// Each adapter translates between the external world (Kubernetes API, Bitbucket API, HTTP, etc.)
-// and the domain types. Adapters must not contain business logic or make domain decisions —
-// they only perform I/O and map external representations to and from domain types.
-package adapters
+package app
 
 import (
 	"context"
@@ -14,8 +10,6 @@ import (
 
 	ktypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-
-	"gitbot/internal/types"
 )
 
 const (
@@ -23,7 +17,7 @@ const (
 	fieldManager  = "gitbot"
 )
 
-// ArgoAppManager implements types.AppManager for a single Kubernetes cluster
+// ArgoAppManager implements AppManager for a single Kubernetes cluster
 // running ArgoCD. It reads and writes ArgoCD Application resources via the
 // Kubernetes REST API.
 type ArgoAppManager struct {
@@ -34,13 +28,13 @@ type ArgoAppManager struct {
 // NewArgoAppManager creates an ArgoAppManager for the given Kubernetes clientset.
 // clusterName is stamped on every Application returned by List so that callers
 // can identify which cluster the app belongs to.
-func NewArgoAppManager(cs *kubernetes.Clientset, clusterName string) types.AppManager {
+func NewArgoAppManager(cs *kubernetes.Clientset, clusterName string) AppManager {
 	return &ArgoAppManager{clientset: cs, clusterName: clusterName}
 }
 
 // List returns all ArgoCD Application resources found in the argocd namespace,
 // with the Cluster field set to the configured cluster name.
-func (a *ArgoAppManager) List() ([]types.Application, error) {
+func (a *ArgoAppManager) List() ([]Application, error) {
 	data, err := a.clientset.RESTClient().Get().
 		AbsPath("/apis/argoproj.io/v1alpha1/applications").
 		DoRaw(context.Background())
@@ -53,7 +47,7 @@ func (a *ArgoAppManager) List() ([]types.Application, error) {
 		return nil, err
 	}
 
-	apps := make([]types.Application, 0, len(list.Items))
+	apps := make([]Application, 0, len(list.Items))
 	for _, item := range list.Items {
 		app := toApplication(item)
 		app.Cluster = a.clusterName
@@ -63,13 +57,13 @@ func (a *ArgoAppManager) List() ([]types.Application, error) {
 }
 
 // Lock points the ArgoCD application at targetBranch and records prID as the lock holder.
-func (a *ArgoAppManager) Lock(app types.Application, targetBranch string, prID int) error {
+func (a *ArgoAppManager) Lock(app Application, targetBranch string, prID int) error {
 	locked := app.Lock(targetBranch, prID)
 	return a.update(locked)
 }
 
 // Unlock restores the application to its pre-lock branch and removes the lock annotations.
-func (a *ArgoAppManager) Unlock(app types.Application) error {
+func (a *ArgoAppManager) Unlock(app Application) error {
 	unlocked := app.Unlock()
 	if err := a.update(unlocked); err != nil {
 		return err
@@ -77,7 +71,7 @@ func (a *ArgoAppManager) Unlock(app types.Application) error {
 	return a.clean(app.Name)
 }
 
-func (a *ArgoAppManager) update(app types.Application) error {
+func (a *ArgoAppManager) update(app Application) error {
 	body, err := json.Marshal(toRequest(app))
 	if err != nil {
 		return err
@@ -151,7 +145,7 @@ type argoAppPatch struct {
 	} `json:"spec"`
 }
 
-func toApplication(a argoApp) types.Application {
+func toApplication(a argoApp) Application {
 	prID, _ := strconv.Atoi(a.Metadata.Annotations.PullRequestId)
 
 	env := a.Metadata.Annotations.Environment
@@ -163,7 +157,7 @@ func toApplication(a argoApp) types.Application {
 		}
 	}
 
-	return types.Application{
+	return Application{
 		Name:          a.Metadata.Name,
 		Repository:    a.Spec.Source.RepoUrl,
 		Branch:        a.Spec.Source.TargetRevision,
@@ -175,7 +169,7 @@ func toApplication(a argoApp) types.Application {
 	}
 }
 
-func toRequest(app types.Application) argoAppPatch {
+func toRequest(app Application) argoAppPatch {
 	var p argoAppPatch
 	p.Metadata.Annotations.Rollback = app.LastBranch
 	p.Metadata.Annotations.PullRequestId = strconv.Itoa(app.PullRequestId)
@@ -189,24 +183,24 @@ func toRequest(app types.Application) argoAppPatch {
 }
 
 // NewListApps returns a function that lists all ArgoCD applications in the cluster.
-func NewListApps(cs *kubernetes.Clientset) func() ([]types.Application, error) {
+func NewListApps(cs *kubernetes.Clientset) func() ([]Application, error) {
 	m := &ArgoAppManager{clientset: cs, clusterName: os.Getenv("CLUSTER_NAME")}
 	return m.List
 }
 
 // GetApp returns a function that finds a single ArgoCD application by name.
-func GetApp(cs *kubernetes.Clientset) func(name string) (types.Application, error) {
+func GetApp(cs *kubernetes.Clientset) func(name string) (Application, error) {
 	m := &ArgoAppManager{clientset: cs, clusterName: os.Getenv("CLUSTER_NAME")}
-	return func(name string) (types.Application, error) {
+	return func(name string) (Application, error) {
 		apps, err := m.List()
 		if err != nil {
-			return types.Application{}, err
+			return Application{}, err
 		}
 		for _, a := range apps {
 			if a.Name == name {
 				return a, nil
 			}
 		}
-		return types.Application{}, fmt.Errorf("app %q not found", name)
+		return Application{}, fmt.Errorf("app %q not found", name)
 	}
 }

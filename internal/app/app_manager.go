@@ -1,6 +1,4 @@
-// Package types contains the pure domain types and interfaces for kubeops-agent.
-// No external dependencies — only the Go standard library is allowed here.
-package types
+package app
 
 // AppManager abstracts read and write operations on ArgoCD applications.
 // Implemented by adapter.ArgoAppManager for the Kubernetes/ArgoCD backend.

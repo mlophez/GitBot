@@ -1,4 +1,4 @@
-package internal
+package event
 
 import (
 	"encoding/json"
@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	
-	"gitbot/internal/adapters"
-	"gitbot/internal/types"
+	"gitbot/internal/logger"
+	"gitbot/internal/app"
 )
 
 // notificationRequest is the expected body for POST /api/v1/notification.
@@ -20,9 +20,9 @@ type notificationRequest struct {
 // Looks up the ArgoCD app by name; if it is locked, posts the message to the
 // pull request that holds the lock. Silently succeeds when the app is unlocked.
 // Returns 400 if the body cannot be parsed, 404 if the app is not found.
-func NotificationHandle(manager types.AppManager, provider types.Provider) http.HandlerFunc {
+func NotificationHandle(manager app.AppManager, provider Provider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log := adapters.Logger(r.Context())
+		log := logger.Logger(r.Context())
 
 		var body notificationRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -40,7 +40,7 @@ func NotificationHandle(manager types.AppManager, provider types.Provider) http.
 			return
 		}
 
-		var found *types.Application
+		var found *app.Application
 		for i := range apps {
 			if apps[i].Name == body.AppName {
 				found = &apps[i]

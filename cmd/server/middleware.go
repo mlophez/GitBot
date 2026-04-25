@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"gitbot/internal/adapters"
+	"gitbot/internal/logger"
 )
 
 // requestID is a middleware that injects a unique request ID into every request
@@ -19,7 +19,7 @@ func requestID(next http.Handler) http.Handler {
 		if id == "" {
 			id = newRequestID()
 		}
-		ctx := adapters.WithRequestID(r.Context(), id)
+		ctx := logger.WithRequestID(r.Context(), id)
 		w.Header().Set("X-Request-ID", id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

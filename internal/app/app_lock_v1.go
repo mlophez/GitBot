@@ -1,13 +1,11 @@
-package internal
+package app
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
 
-	
-	"gitbot/internal/adapters"
-	"gitbot/internal/types"
+	"gitbot/internal/logger"
 )
 
 // LockRequest is the request body for the lock endpoint.
@@ -19,10 +17,10 @@ type LockRequest struct {
 // LockApp handles POST /api/v1/apps/{id}/lock.
 // Points the ArgoCD app to the given branch and marks it as locked by the PR.
 // Returns 404 if the app does not exist, 409 if it is already locked by another PR.
-func LockApp(manager types.AppManager) http.HandlerFunc {
+func LockApp(manager AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		log := adapters.Logger(r.Context())
+		log := logger.Logger(r.Context())
 
 		log.Info("LockApp request received", "app", id)
 
@@ -66,11 +64,11 @@ func LockApp(manager types.AppManager) http.HandlerFunc {
 }
 
 // findByName returns the first application whose Name matches, or an error if none is found.
-func findByName(apps []types.Application, name string) (types.Application, error) {
+func findByName(apps []Application, name string) (Application, error) {
 	for _, a := range apps {
 		if a.Name == name {
 			return a, nil
 		}
 	}
-	return types.Application{}, fmt.Errorf("app %q not found", name)
+	return Application{}, fmt.Errorf("app %q not found", name)
 }

@@ -1,11 +1,11 @@
-package adapters
+package event
 
 import (
 	"sync"
 )
 
 // MemoryQueue is a generic thread-safe in-memory FIFO queue.
-// It implements types.Queue for any item type T.
+// It implements Queue for any item type T.
 type MemoryQueue[T any] struct {
 	items []interface{}
 	mu    sync.Mutex

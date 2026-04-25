@@ -1,21 +1,20 @@
-package internal
+package event
 
 import (
 	"bytes"
 	"io"
 	"net/http"
 
-	"gitbot/internal/adapters"
-	"gitbot/internal/types"
+	"gitbot/internal/logger"
 )
 
 // EventCreate handles webhook POST requests from any git provider.
 // Parses the incoming webhook payload using the given provider, creates a structured event,
 // and enqueues it for asynchronous processing by the event processor.
 // Returns 401 if the webhook token is invalid, 400 if the payload cannot be parsed.
-func EventCreate(queue types.Queue, provider types.Provider, webhookToken string) http.HandlerFunc {
+func EventCreate(queue Queue, provider Provider, webhookToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log := adapters.Logger(r.Context())
+		log := logger.Logger(r.Context())
 		log.Info("EventCreate webhook received")
 
 		body, err := io.ReadAll(r.Body)
@@ -38,7 +37,7 @@ func EventCreate(queue types.Queue, provider types.Provider, webhookToken string
 			return
 		}
 
-		queue.Enqueue(types.QueueItem{Event: e, Provider: provider})
+		queue.Enqueue(QueueItem{Event: e, Provider: provider})
 		log.Info("EventCreate event enqueued", "type", e.Type, "repository", e.Repository)
 
 		w.Header().Set("Content-Type", "application/json")

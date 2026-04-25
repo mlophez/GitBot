@@ -1,4 +1,4 @@
-package adapters
+package app
 
 import (
 	"bytes"
@@ -9,10 +9,9 @@ import (
 	"net/http"
 	"time"
 
-	"gitbot/internal/types"
 )
 
-// RemoteAppManager implements types.AppManager by calling a remote GitBot
+// RemoteAppManager implements AppManager by calling a remote GitBot
 // agent instance's REST API over HTTP. Used by the central instance to
 // manage ArgoCD applications on remote clusters.
 type RemoteAppManager struct {
@@ -27,7 +26,7 @@ type RemoteAppManager struct {
 // apiToken is sent as a Bearer token on every outgoing request; pass an empty string to disable.
 // When insecureSkipTLSVerify is true the HTTP client skips certificate validation —
 // use only in non-production environments.
-func NewRemoteAppManager(baseURL, clusterName string, insecureSkipTLSVerify bool, apiToken string) types.AppManager {
+func NewRemoteAppManager(baseURL, clusterName string, insecureSkipTLSVerify bool, apiToken string) AppManager {
 	transport := http.DefaultTransport
 	if insecureSkipTLSVerify {
 		transport = &http.Transport{
@@ -78,7 +77,7 @@ type remoteLockRequest struct {
 
 // List fetches all applications from the remote agent and returns them
 // with the Cluster field set to the configured cluster name.
-func (r *RemoteAppManager) List() ([]types.Application, error) {
+func (r *RemoteAppManager) List() ([]Application, error) {
 	req, err := r.newRequest(http.MethodGet, r.baseURL+"/api/v1/apps", nil)
 	if err != nil {
 		return nil, fmt.Errorf("remote agent %q: failed to build request: %w", r.clusterName, err)
@@ -100,9 +99,9 @@ func (r *RemoteAppManager) List() ([]types.Application, error) {
 		return nil, fmt.Errorf("remote agent %q: failed to decode response: %w", r.clusterName, err)
 	}
 
-	apps := make([]types.Application, 0, len(items))
+	apps := make([]Application, 0, len(items))
 	for _, item := range items {
-		apps = append(apps, types.Application{
+		apps = append(apps, Application{
 			Name:          item.Name,
 			Cluster:       r.clusterName,
 			Repository:    item.Repository,
@@ -117,7 +116,7 @@ func (r *RemoteAppManager) List() ([]types.Application, error) {
 }
 
 // Lock tells the remote agent to lock the application to targetBranch for prID.
-func (r *RemoteAppManager) Lock(app types.Application, targetBranch string, prID int) error {
+func (r *RemoteAppManager) Lock(app Application, targetBranch string, prID int) error {
 	body, err := json.Marshal(remoteLockRequest{Branch: targetBranch, PullRequestId: prID})
 	if err != nil {
 		return err
@@ -143,7 +142,7 @@ func (r *RemoteAppManager) Lock(app types.Application, targetBranch string, prID
 }
 
 // Unlock tells the remote agent to unlock the application.
-func (r *RemoteAppManager) Unlock(app types.Application) error {
+func (r *RemoteAppManager) Unlock(app Application) error {
 	url := fmt.Sprintf("%s/api/v1/apps/%s/unlock", r.baseURL, app.Name)
 	req, err := r.newRequest(http.MethodPost, url, nil)
 	if err != nil {

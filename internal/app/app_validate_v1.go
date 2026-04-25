@@ -1,11 +1,11 @@
-package internal
+package app
 
 import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
 
-	"gitbot/internal/adapters"
+	"gitbot/internal/logger"
 )
 
 // ValidateAppRequest is the subset of the Kubernetes AdmissionReview request
@@ -59,7 +59,7 @@ type ValidateAppResponse struct {
 // did not change, or the application is not locked.
 func ValidateApp(botUsername string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log := adapters.Logger(r.Context())
+		log := logger.Logger(r.Context())
 
 		var req ValidateAppRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

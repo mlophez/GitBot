@@ -10,9 +10,11 @@ A webhook bot for Bitbucket and GitHub that listens for pull request events and 
 Every package must have a comment on the `package` declaration explaining its role in the architecture and what it contains. Place it in the most representative file of the package.
 
 ```go
-// Package usecase contains the HTTP handlers for the apps API.
-// Each file implements one use case following the imperative shell pattern.
-package internal
+// Package app is the vertical slice for ArgoCD application management.
+// It contains the pure domain (Application, AppManager), the adapters that
+// implement the manager against Kubernetes/ArgoCD, and the use cases exposed
+// via HTTP (list, lock, unlock, validate).
+package app
 ```
 
 ### Exported symbols
@@ -24,7 +26,7 @@ type AppResponse struct { ... }
 
 // ListApps handles GET /api/v1/apps.
 // Returns the list of all ArgoCD applications tracked in the cluster.
-func ListApps(manager types.AppManager) http.HandlerFunc { ... }
+func ListApps(manager AppManager) http.HandlerFunc { ... }
 ```
 
 ### Use case handlers
@@ -37,7 +39,7 @@ Each `*_v1.go` handler comment must include:
 // LockApp handles POST /api/v1/apps/{id}/lock.
 // Points the ArgoCD app to the given branch and marks it as locked by the PR.
 // Returns 404 if the app does not exist, 409 if it is already locked.
-func LockApp(manager types.AppManager) http.HandlerFunc {
+func LockApp(manager AppManager) http.HandlerFunc {
 ```
 
 ### Interfaces
@@ -45,30 +47,49 @@ Every interface must document what it abstracts and who implements it.
 
 ```go
 // AppManager abstracts read and write operations on ArgoCD applications.
-// Implemented by adapter.ArgoAppManager for the Kubernetes/ArgoCD backend.
+// Implemented by ArgoAppManager (same package) for the Kubernetes/ArgoCD backend.
 type AppManager interface { ... }
 ```
 
 ### Inline comments
 Add inline comments only where logic is non-obvious. Do not comment self-evident code.
 
-## Architecture: Pure Core / Imperative Shell
+## Architecture: Clean Architecture + Vertical Slice + Screaming Architecture
 
-The codebase follows the **Pure Core / Imperative Shell** pattern:
+The codebase is organised as **vertical slices** under `internal/`. Each slice is a self-contained Go package named after the business concern it owns (`app`, `event`, `status`) — the directory tree screams what the system does, not which framework it uses.
 
-- **Pure core** — domain logic lives in pure functions with no side effects. Example: `internal/app/usecase.go` (`lockApp`, `unlockApp`, `filterAppByRepoAndFiles`). These are tested without mocks.
-- **Imperative shell** — use cases in services orchestrate calls to pure functions and then call repositories/providers that perform I/O. Example: `internal/app/service.go` calls `lockApp()` (pure) then `repository.Update()` (I/O).
-- **Use cases** are in `service.go` per package. Each use case: fetch data → call pure function → persist result.
-- **No dependency injection frameworks.** Wire dependencies manually in `cmd/server/main.go`.
+Inside each slice we keep the classic **two-layer Clean Architecture** split:
+
+- **Pure core (domain)** — value types and interfaces with no I/O and no external dependencies. Tested without mocks. Examples: `internal/app/application.go`, `internal/event/event.go`, `internal/event/event_process_v1.go` (the `parseAction`, `applyLock`, `applyUnlock`, `filterByRepoAndFiles`, etc. helpers).
+- **Imperative shell** — use cases (`*_v1.go`) that orchestrate the pure core and then call adapters; and adapters (manager/provider/queue implementations) that perform I/O against Kubernetes, Bitbucket, HTTP, etc.
+
+Both layers live **flat** inside the slice package — no `domain/` or `adapter/` subpackages. The split is enforced by file convention and by what each file is allowed to import:
+
+- domain files import only the standard library (and other domain files in the same slice);
+- adapter files import infra SDKs (Kubernetes, HTTP, etc.) and translate to/from domain types;
+- use case files (`*_v1.go`) wire the two together — fetch data via adapter → call pure function → persist via adapter.
+
+**One object per file.** Each exported type, interface, or struct lives in its own file. Adapter-internal DTOs (e.g. Bitbucket webhook JSON shapes) stay co-located with their adapter.
+
+**No dependency injection frameworks.** Wire dependencies manually in `cmd/server/main.go`.
+
+### Allowed dependencies between slices
+
+```
+event ──► app          (event uses app.AppManager / app.Application)
+config, logger         (cross-cutting, imported by anyone)
+```
+
+`app` must NOT import `event`. Notification handling lives in `event` precisely to keep this direction one-way.
 
 ### Adapters are translators, not decision-makers
 
-Every adapter in `internal/adapters/` is a struct that implements one of the interfaces defined in `internal/types/` (e.g. `Provider`, `AppManager`, `Queue`). Their only job is to translate between the external world (HTTP, Kubernetes API, Bitbucket API, etc.) and the domain types. They must not contain business logic or decisions.
+Every adapter (e.g. `ArgoAppManager`, `BitbucketClient`, `EnvConfigLoader`, `MemoryQueue`, `RemoteAppManager`, `MultiClusterAppManager`) implements one of the interfaces in its slice. Its only job is to translate between the external world (HTTP, Kubernetes API, Bitbucket API, etc.) and the domain types. Adapters must not contain business logic or decisions.
 
 - **Allowed in adapters:** parsing payloads, serialising responses, making API calls, mapping external structs to domain types, setting observable facts on the event (e.g. `BotGenerated = true`).
 - **Not allowed in adapters:** deciding what action to take, filtering events based on business rules, enforcing policy, branching on domain state.
 
-If you find yourself writing an `if` in an adapter that decides whether something *should happen*, move that decision to a use case or a pure function in `internal/types/`.
+If you find yourself writing an `if` in an adapter that decides whether something *should happen*, move that decision to a use case or a pure function in the same slice.
 
 **Why this matters:** adapters are swapped out (Bitbucket → GitHub, ArgoCD → FluxCD). Logic placed in an adapter must be re-implemented for every new provider. Logic placed in the use case is inherited automatically.
 
@@ -81,33 +102,48 @@ cmd/
   server/event_processor.go # Background worker: dequeues events, enriches, processes, writes comments.
   repair/main.go            # Utility to reconcile app state (stub, not functional).
 
-internal/             # Use cases (imperative shell) — package "internal"
-                      # One file per use case, named {domain}_{action}_{version}.go
-  app_list_v1.go            # GET  /api/v1/apps                    — list all ArgoCD apps
-  app_lock_v1.go            # POST /api/v1/apps/{id}/lock           — lock an app to a PR branch
-  app_unlock_v1.go          # POST /api/v1/apps/{id}/unlock         — unlock and restore branch
-  app_validate_v1.go        # POST /api/v1/admission/apps/validate  — Kubernetes admission webhook
-  event_create_v1.go        # POST /api/v1/webhook/bitbucket        — parse webhook, enqueue event
-  event_process_v1.go       # Pure core: parseAction, applyLock, applyUnlock + filter helpers
-  notification_handle_v1.go # POST /api/v1/notification             — ArgoCD deployment notifications
-  status_v1.go              # GET  /api/v1/status                   — health check
+internal/             # Vertical slices — one Go package per business concern.
+                      # Layout inside each slice is FLAT (no domain/adapter subdirs).
+                      # Conventions: one object per file; *_v1.go is a use case.
 
-  types/              # Pure domain — no external dependencies, no I/O
-    application.go          # Application type + methods: Lock(), Unlock(), Sanitize()
-    application_manager.go  # AppManager interface: List, Lock, Unlock
-    event.go                # EventType, Event, PullRequest, QueueItem, SecurityRule, EventResponse
-    provider.go             # Provider interface: ValidateWebhookToken, ParseEvent, GetData, WriteComment, WriteEventResponse
-    queue.go                # Queue interface
-    config.go               # Config, ClusterConfig, ClusterAuth, ConfigLoader interface
+  app/                # ArgoCD application management — package "app"
+    application.go              # Application type + methods (Lock/Unlock/Sanitize) — pure
+    app_manager.go              # AppManager interface — pure
+    argo_app_manager.go         # ArgoAppManager: AppManager against Kubernetes/ArgoCD — adapter
+    multi_cluster_app_manager.go# MultiClusterAppManager: aggregates per-cluster backends — adapter
+    remote_app_manager.go       # RemoteAppManager: delegates to a remote GitBot agent — adapter
+    app_response.go             # AppResponse + toAppResponse (HTTP DTO) — shell
+    app_list_v1.go              # GET  /api/v1/apps
+    app_lock_v1.go              # POST /api/v1/apps/{id}/lock
+    app_unlock_v1.go            # POST /api/v1/apps/{id}/unlock
+    app_validate_v1.go          # POST /api/v1/admission/apps/validate (admission webhook)
 
-  adapters/           # Infrastructure implementations of types interfaces
-    argocd.go               # ArgoAppManager: implements AppManager against Kubernetes API
-    bitbucket_client.go     # BitbucketClient: implements Provider for Bitbucket webhooks
-    config_loader.go        # EnvConfigLoader: loads env.ini + optional config.yaml
-    logger.go               # Structured logger helpers (request ID injection)
-    multi_cluster_app_manager.go  # MultiClusterAppManager: aggregates per-cluster backends
-    queue_memory.go         # MemoryQueue: generic thread-safe in-memory queue
-    remote_app_manager.go   # RemoteAppManager: delegates to a remote GitBot agent via HTTP
+  event/              # Pull request events — package "event"
+    event.go                    # Event + EventType — pure
+    pull_request.go             # PullRequest — pure
+    event_response.go           # EventResponse + EventAppStatus — pure
+    queue.go                    # Queue interface — pure
+    queue_item.go               # QueueItem — pure
+    provider.go                 # Provider interface — pure
+    process_fn.go               # ProcessFn type — pure
+    bitbucket_client.go         # BitbucketClient: Provider for Bitbucket webhooks — adapter
+    memory_queue.go             # MemoryQueue: generic thread-safe in-memory queue — adapter
+    event_create_v1.go          # POST /api/v1/webhook/bitbucket — parse + enqueue
+    event_process_v1.go         # Worker use case: parseAction, applyLock/Unlock, filters
+    notification_handle_v1.go   # POST /api/v1/notification — ArgoCD deployment notifications
+
+  status/             # Health check — package "status"
+    status_v1.go                # GET /api/v1/status
+
+  config/             # Runtime configuration — package "config" (cross-slice)
+    config.go                   # Config struct
+    cluster_config.go           # ClusterConfig + ClusterAuth
+    config_loader.go            # ConfigLoader interface
+    security_rule.go            # SecurityRule
+    env_config_loader.go        # EnvConfigLoader: env.ini + optional YAML — adapter
+
+  logger/             # Structured logging with request ID — package "logger" (cross-cutting)
+    logger.go                   # WithRequestID + Logger
 
 pkg/
   utils/utils.go      # Generic helpers: contains(), IFTernary()
@@ -242,41 +278,41 @@ The Makefile `run` and `test` targets have stale paths — prefer the commands a
 
 ## Adding a New Git Provider
 
-To add GitHub (or another provider), implement the `event.Provider` interface:
+To add GitHub (or another provider), implement the `event.Provider` interface (defined in `internal/event/provider.go`):
 
 ```go
 type Provider interface {
+    ValidateWebhookToken(secret string, headers http.Header, body []byte) error
     ParseEvent(headers http.Header, body io.ReadCloser) (Event, error)
     GetData(Event) (Event, error)
     WriteComment(repo string, prId int, parentId int, msg string) error
+    WriteEventResponse(repo string, prId int, parentId int, resp *EventResponse, clusterName string) error
 }
 ```
 
-Place the implementation in `internal/event/provider/github.go`, then register a new route and handler in `cmd/server/main.go` following the same pattern as Bitbucket.
+Place the implementation as a new file inside `internal/event/` (e.g. `github_client.go`), then register a new route and handler in `cmd/server/main.go` following the same pattern as `BitbucketClient`.
 
 ## Adding a New CD Platform (FluxCD, etc.)
 
-The `app.Repository` interface abstracts the CD platform:
+The `app.AppManager` interface (defined in `internal/app/app_manager.go`) abstracts the CD platform:
 
 ```go
-type Repository interface {
-    List(ctx context.Context) ([]Application, error)
-    Update(ctx context.Context, app Application) (Application, error)
-    Clean(ctx context.Context, app Application) (Application, error)
+type AppManager interface {
+    List() ([]Application, error)
+    Lock(app Application, targetBranch string, prID int) error
+    Unlock(app Application) error
 }
 ```
 
-`KubeRepository` in `internal/app/argocd.go` implements this for ArgoCD. Add a new implementation for FluxCD and wire it in `app.NewService()`.
+`ArgoAppManager` in `internal/app/argo_app_manager.go` implements this for ArgoCD. Add a new implementation as a sibling file (e.g. `flux_app_manager.go`) and wire it in `cmd/server/main.go`.
 
 ## Known Incomplete Areas
 
 - `cmd/repair/main.go` — repair/reconcile utility is a stub, not functional.
-- `internal/cluster/cluster.go` — empty struct, multi-cluster routing not implemented.
-- `internal/comment/` — unused package, duplicates provider comment logic.
-- `pkg/argocd/` — mostly commented out, conflicts with `internal/app/argocd.go`. Ignore it.
-- `TODO` in `event/service.go:95` — double-lock for app-of-apps pattern is disabled to avoid infinite loops.
-- Test files under `tests/` reference old module path `github.com/MLR96/argocd-bot` — legacy, not wired to current test suite.
-- `SecurityRule` is parsed from config but not yet enforced in `event/service.go` (the `rules` field exists but enforcement code is commented out).
+- `pkg/argocd/` — mostly commented out, superseded by `internal/app/argo_app_manager.go`. Ignore it.
+- `TODO` in `internal/event/event_process_v1.go` — double-lock for app-of-apps pattern is disabled to avoid infinite loops.
+- Test files under `tests/` reference the old module path `github.com/MLR96/argocd-bot` — legacy, not wired to the current test suite.
+- `SecurityRule` is parsed from config (`internal/config/security_rule.go`) but not yet enforced in `internal/event/event_process_v1.go`.
 
 ## Module Name
 

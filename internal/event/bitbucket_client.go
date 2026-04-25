@@ -1,4 +1,4 @@
-package adapters
+package event
 
 import (
 	"bytes"
@@ -7,14 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"gitbot/internal/types"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 )
 
-// BitbucketClient implements types.Provider for Bitbucket webhooks and API calls.
+// BitbucketClient implements Provider for Bitbucket webhooks and API calls.
 // It parses incoming webhook payloads, enriches events with diff and commit data,
 // and writes comments back to pull requests via the Bitbucket REST API.
 type BitbucketClient struct {
@@ -53,12 +52,12 @@ func (b BitbucketClient) ValidateWebhookToken(secret string, headers http.Header
 	return nil
 }
 
-// ParseEvent parses a Bitbucket webhook request into a types.Event.
+// ParseEvent parses a Bitbucket webhook request into a Event.
 // Sets BotGenerated to true when the actor UUID matches the configured bot account.
 // Returns an error if the request body cannot be decoded.
-func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (types.Event, error) {
+func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (Event, error) {
 	var webhook bpWebhookRequest
-	var e types.Event
+	var e Event
 
 	err := json.NewDecoder(body).Decode(&webhook)
 	if err != nil {
@@ -81,17 +80,17 @@ func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (ty
 	eventKey := headers.Get("X-Event-Key")
 	switch strings.ToLower(eventKey) {
 	case "pullrequest:created":
-		e.Type = types.EventTypeOpened
+		e.Type = EventTypeOpened
 	case "pullrequest:updated":
-		e.Type = types.EventTypeUpdated
+		e.Type = EventTypeUpdated
 	case "pullrequest:fulfilled":
-		e.Type = types.EventTypeMerged
+		e.Type = EventTypeMerged
 	case "pullrequest:rejected":
-		e.Type = types.EventTypeDeclined
+		e.Type = EventTypeDeclined
 	case "pullrequest:comment_created":
-		e.Type = types.EventTypeCommented
+		e.Type = EventTypeCommented
 	default:
-		e.Type = types.EventTypeUnknown
+		e.Type = EventTypeUnknown
 	}
 
 	e.PullRequest.Approved = 0
@@ -112,7 +111,7 @@ func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (ty
 }
 
 // GetData enriches an event with the files changed and commits behind from the Bitbucket API.
-func (b BitbucketClient) GetData(e types.Event) (types.Event, error) {
+func (b BitbucketClient) GetData(e Event) (Event, error) {
 	filesChanged, err := b.GetFilesChanged(e.Repository, e.PullRequest.Id)
 	if err != nil {
 		return e, err
@@ -217,13 +216,13 @@ func (b BitbucketClient) WriteComment(repo string, prId int, parentId int, msg s
 
 // WriteEventResponse formats resp as a Markdown comment and posts it on the pull request.
 // clusterName is used as a fallback display label when apps carry no cluster information.
-func (b BitbucketClient) WriteEventResponse(repo string, prId int, parentId int, resp *types.EventResponse, clusterName string) error {
+func (b BitbucketClient) WriteEventResponse(repo string, prId int, parentId int, resp *EventResponse, clusterName string) error {
 	return b.WriteComment(repo, prId, parentId, b.formatEventResponse(resp, clusterName))
 }
 
 // formatEventResponse renders an EventResponse as a Markdown string suitable for
 // posting as a Bitbucket pull request comment.
-func (b BitbucketClient) formatEventResponse(resp *types.EventResponse, clusterName string) string {
+func (b BitbucketClient) formatEventResponse(resp *EventResponse, clusterName string) string {
 	if resp.Environments != nil {
 		return bbFormatHelp(resp.Environments)
 	}
@@ -292,15 +291,15 @@ func bbFormatHelp(envs []string) string {
 		"| `#argo help` | Show this help |\n"
 }
 
-func bbGroupByCluster(apps []types.EventAppStatus) map[string][]types.EventAppStatus {
-	result := make(map[string][]types.EventAppStatus)
+func bbGroupByCluster(apps []EventAppStatus) map[string][]EventAppStatus {
+	result := make(map[string][]EventAppStatus)
 	for _, a := range apps {
 		result[a.Cluster] = append(result[a.Cluster], a)
 	}
 	return result
 }
 
-func bbSortedKeys(m map[string][]types.EventAppStatus) []string {
+func bbSortedKeys(m map[string][]EventAppStatus) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
