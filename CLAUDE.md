@@ -107,11 +107,11 @@ internal/             # Vertical slices — one Go package per business concern.
                       # Conventions: one object per file; *_v1.go is a use case.
 
   app/                # ArgoCD application management — package "app"
-    application.go              # Application type + methods (Lock/Unlock/Sanitize) — pure
+    app.go                      # Application type + methods (Lock/Unlock/Sanitize) — pure
     app_manager.go              # AppManager interface — pure
-    argo_app_manager.go         # ArgoAppManager: AppManager against Kubernetes/ArgoCD — adapter
-    multi_cluster_app_manager.go# MultiClusterAppManager: aggregates per-cluster backends — adapter
-    remote_app_manager.go       # RemoteAppManager: delegates to a remote GitBot agent — adapter
+    app_manager_argo.go         # ArgoAppManager: AppManager against Kubernetes/ArgoCD — adapter
+    app_manager_multi.go        # MultiClusterAppManager: aggregates per-cluster backends — adapter
+    app_manager_remote.go       # RemoteAppManager: delegates to a remote GitBot agent — adapter
     app_response.go             # AppResponse + toAppResponse (HTTP DTO) — shell
     app_list_v1.go              # GET  /api/v1/apps
     app_lock_v1.go              # POST /api/v1/apps/{id}/lock
@@ -120,14 +120,14 @@ internal/             # Vertical slices — one Go package per business concern.
 
   event/              # Pull request events — package "event"
     event.go                    # Event + EventType — pure
-    pull_request.go             # PullRequest — pure
+    event_pull_request.go       # PullRequest — pure
     event_response.go           # EventResponse + EventAppStatus — pure
+    event_process_fn.go         # ProcessFn type — pure
     queue.go                    # Queue interface — pure
     queue_item.go               # QueueItem — pure
+    queue_memory.go             # MemoryQueue: generic thread-safe in-memory queue — adapter
     provider.go                 # Provider interface — pure
-    process_fn.go               # ProcessFn type — pure
-    bitbucket_client.go         # BitbucketClient: Provider for Bitbucket webhooks — adapter
-    memory_queue.go             # MemoryQueue: generic thread-safe in-memory queue — adapter
+    provider_bitbucket.go       # BitbucketClient: Provider for Bitbucket webhooks — adapter
     event_create_v1.go          # POST /api/v1/webhook/bitbucket — parse + enqueue
     event_process_v1.go         # Worker use case: parseAction, applyLock/Unlock, filters
     notification_handle_v1.go   # POST /api/v1/notification — ArgoCD deployment notifications
@@ -290,7 +290,7 @@ type Provider interface {
 }
 ```
 
-Place the implementation as a new file inside `internal/event/` (e.g. `github_client.go`), then register a new route and handler in `cmd/server/main.go` following the same pattern as `BitbucketClient`.
+Place the implementation as a new file inside `internal/event/` (e.g. `provider_github.go`), then register a new route and handler in `cmd/server/main.go` following the same pattern as `BitbucketClient`.
 
 ## Adding a New CD Platform (FluxCD, etc.)
 
@@ -304,12 +304,12 @@ type AppManager interface {
 }
 ```
 
-`ArgoAppManager` in `internal/app/argo_app_manager.go` implements this for ArgoCD. Add a new implementation as a sibling file (e.g. `flux_app_manager.go`) and wire it in `cmd/server/main.go`.
+`ArgoAppManager` in `internal/app/app_manager_argo.go` implements this for ArgoCD. Add a new implementation as a sibling file (e.g. `app_manager_flux.go`) and wire it in `cmd/server/main.go`.
 
 ## Known Incomplete Areas
 
 - `cmd/repair/main.go` — repair/reconcile utility is a stub, not functional.
-- `pkg/argocd/` — mostly commented out, superseded by `internal/app/argo_app_manager.go`. Ignore it.
+- `pkg/argocd/` — mostly commented out, superseded by `internal/app/app_manager_argo.go`. Ignore it.
 - `TODO` in `internal/event/event_process_v1.go` — double-lock for app-of-apps pattern is disabled to avoid infinite loops.
 - Test files under `tests/` reference the old module path `github.com/MLR96/argocd-bot` — legacy, not wired to the current test suite.
 - `SecurityRule` is parsed from config (`internal/config/security_rule.go`) but not yet enforced in `internal/event/event_process_v1.go`.
