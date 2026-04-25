@@ -12,6 +12,32 @@ import (
 	"gitbot/internal/logger"
 )
 
+// ListResponse is the HTTP response item for the list endpoint.
+type ListResponse struct {
+	Name          string   `json:"name"`
+	Cluster       string   `json:"cluster,omitempty"`
+	Repository    string   `json:"repository"`
+	Branch        string   `json:"branch"`
+	Paths         []string `json:"paths,omitempty"`
+	Locked        bool     `json:"locked"`
+	PullRequestId int      `json:"pull_request_id"`
+	Environment   string   `json:"environment"`
+}
+
+// toListResponse converts a domain Application into its list response form.
+func toListResponse(app Application) ListResponse {
+	return ListResponse{
+		Name:          app.Name,
+		Cluster:       app.Cluster,
+		Repository:    app.Repository,
+		Branch:        app.Branch,
+		Paths:         app.Paths,
+		Locked:        app.Locked,
+		PullRequestId: app.PullRequestId,
+		Environment:   app.Environment,
+	}
+}
+
 // ListApps handles GET /api/v1/apps.
 // Returns the list of all ArgoCD applications currently tracked in the cluster.
 func ListApps(manager AppManager) http.HandlerFunc {
@@ -28,9 +54,9 @@ func ListApps(manager AppManager) http.HandlerFunc {
 
 		log.Info("ListApps returning apps", "count", len(apps))
 
-		resp := make([]AppResponse, len(apps))
+		resp := make([]ListResponse, len(apps))
 		for i, a := range apps {
-			resp[i] = toAppResponse(a)
+			resp[i] = toListResponse(a)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -112,10 +112,9 @@ internal/             # Vertical slices — one Go package per business concern.
     app_manager_argo.go         # ArgoAppManager: AppManager against Kubernetes/ArgoCD — adapter
     app_manager_multi.go        # MultiClusterAppManager: aggregates per-cluster backends — adapter
     app_manager_remote.go       # RemoteAppManager: delegates to a remote GitBot agent — adapter
-    app_response.go             # AppResponse + toAppResponse (HTTP DTO) — shell
-    app_list_v1.go              # GET  /api/v1/apps
-    app_lock_v1.go              # POST /api/v1/apps/{id}/lock
-    app_unlock_v1.go            # POST /api/v1/apps/{id}/unlock
+    app_list_v1.go              # GET  /api/v1/apps          (ListResponse local)
+    app_lock_v1.go              # POST /api/v1/apps/{id}/lock   (LockRequest/LockResponse local)
+    app_unlock_v1.go            # POST /api/v1/apps/{id}/unlock (UnlockResponse local)
     app_validate_v1.go          # POST /api/v1/admission/apps/validate (admission webhook)
 
   event/              # Pull request events — package "event"

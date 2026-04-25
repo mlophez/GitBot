@@ -8,6 +8,32 @@ import (
 	"gitbot/internal/logger"
 )
 
+// UnlockResponse is the HTTP response body for the unlock endpoint.
+type UnlockResponse struct {
+	Name          string   `json:"name"`
+	Cluster       string   `json:"cluster,omitempty"`
+	Repository    string   `json:"repository"`
+	Branch        string   `json:"branch"`
+	Paths         []string `json:"paths,omitempty"`
+	Locked        bool     `json:"locked"`
+	PullRequestId int      `json:"pull_request_id"`
+	Environment   string   `json:"environment"`
+}
+
+// toUnlockResponse converts a domain Application into its unlock response form.
+func toUnlockResponse(app Application) UnlockResponse {
+	return UnlockResponse{
+		Name:          app.Name,
+		Cluster:       app.Cluster,
+		Repository:    app.Repository,
+		Branch:        app.Branch,
+		Paths:         app.Paths,
+		Locked:        app.Locked,
+		PullRequestId: app.PullRequestId,
+		Environment:   app.Environment,
+	}
+}
+
 // UnlockApp handles POST /api/v1/apps/{id}/unlock.
 // Restores the ArgoCD app to the branch it was pointing to before the lock,
 // removes the lock annotations, and marks the app as unlocked.
@@ -47,6 +73,6 @@ func UnlockApp(manager AppManager) http.HandlerFunc {
 
 		log.Info("UnlockApp app unlocked successfully", "app", id, "restored_branch", app.LastBranch)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(toAppResponse(app.Unlock()))
+		json.NewEncoder(w).Encode(toUnlockResponse(app.Unlock()))
 	}
 }
