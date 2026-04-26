@@ -47,13 +47,14 @@ func (m *MultiClusterAppManager) List() ([]Application, error) {
 	return all, nil
 }
 
-// Lock routes the lock operation to the backend that owns app.Cluster.
-func (m *MultiClusterAppManager) Lock(app Application, targetBranch string, prID int) error {
+// Lock routes the lock operation to the backend that owns app.Cluster,
+// forwarding the force flag so remote backends can skip the already-locked check.
+func (m *MultiClusterAppManager) Lock(app Application, targetBranch string, prID int, force bool) error {
 	mgr, ok := m.managers[app.Cluster]
 	if !ok {
 		return fmt.Errorf("unknown cluster %q for app %q", app.Cluster, app.Name)
 	}
-	return mgr.Lock(app, targetBranch, prID)
+	return mgr.Lock(app, targetBranch, prID, force)
 }
 
 // Unlock routes the unlock operation to the backend that owns app.Cluster.

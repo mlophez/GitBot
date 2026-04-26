@@ -42,13 +42,16 @@ func toLockResponse(app Application) LockResponse {
 
 // LockApp handles POST /api/v1/apps/{id}/lock.
 // Points the ArgoCD app to the given branch and marks it as locked by the PR.
-// Returns 404 if the app does not exist, 409 if it is already locked by another PR.
+// Returns 404 if the app does not exist.
+// Returns 409 if the app is already locked, unless the query parameter ?force=true
+// is provided — in that case the lock is overwritten directly (branch-to-branch transition).
 func LockApp(manager AppManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
+		force := r.URL.Query().Get("force") == "true"
 		log := logger.Logger(r.Context())
 
-		log.Info("LockApp request received", "app", id)
+		log.Info("LockApp request received", "app", id, "force", force)
 
 		var req LockRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -71,19 +74,19 @@ func LockApp(manager AppManager) http.HandlerFunc {
 			return
 		}
 
-		if app.Locked {
+		if app.Locked && !force {
 			log.Warn("LockApp app already locked", "app", id, "pull_request_id", app.PullRequestId)
 			http.Error(w, "app is already locked", http.StatusConflict)
 			return
 		}
 
-		if err := manager.Lock(app, req.Branch, req.PullRequestId); err != nil {
+		if err := manager.Lock(app, req.Branch, req.PullRequestId, force); err != nil {
 			log.Error("LockApp failed to lock app", "app", id, "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		log.Info("LockApp app locked successfully", "app", id, "branch", req.Branch, "pull_request_id", req.PullRequestId)
+		log.Info("LockApp app locked successfully", "app", id, "branch", req.Branch, "pull_request_id", req.PullRequestId, "force", force)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(toLockResponse(app.Lock(req.Branch, req.PullRequestId)))
 	}

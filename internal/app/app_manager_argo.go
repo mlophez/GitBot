@@ -57,7 +57,9 @@ func (a *ArgoAppManager) List() ([]Application, error) {
 }
 
 // Lock points the ArgoCD application at targetBranch and records prID as the lock holder.
-func (a *ArgoAppManager) Lock(app Application, targetBranch string, prID int) error {
+// The force parameter is accepted for interface compliance but is not needed here: the
+// underlying Kubernetes MergePatch always overwrites the current state regardless.
+func (a *ArgoAppManager) Lock(app Application, targetBranch string, prID int, _ bool) error {
 	locked := app.Lock(targetBranch, prID)
 	return a.update(locked)
 }

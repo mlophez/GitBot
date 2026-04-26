@@ -124,12 +124,13 @@ func parseAction(e Event) (action, *string, *string, bool) {
 		return unlockAction, &env, &appname, false
 
 	case EventTypeCommented:
-		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback|help)(?: (\w+))?(?: ([- \w]+?))?(?:\s+--force)?\s*$`).
-			FindStringSubmatch(e.Comment)
+		force := strings.Contains(strings.ToLower(e.Comment), "--force")
+		stripped := strings.TrimSpace(regexp.MustCompile(`(?i)\s*--force`).ReplaceAllString(e.Comment, ""))
+		filter := regexp.MustCompile(`(?i)(/|#)(argo|flux|bot)\s(lock|deploy|test|unlock|undeploy|rollback|help)(?: (\w+))?(?: ([- \w]+?))?\s*$`).
+			FindStringSubmatch(stripped)
 		if len(filter) <= 3 {
 			break
 		}
-		force := strings.Contains(strings.ToLower(e.Comment), "--force")
 		command := filter[3]
 		if len(filter) > 4 && filter[4] != "" {
 			env = strings.ToLower(filter[4])
@@ -211,7 +212,7 @@ func applyLock(manager app.AppManager, pr PullRequest, apps []app.Application, f
 
 		if !a.Locked {
 			slog.Info("EventProcess: locking app", "app", a.Name)
-			if err := manager.Lock(a, pr.SourceBranch, pr.Id); err != nil {
+			if err := manager.Lock(a, pr.SourceBranch, pr.Id, force); err != nil {
 				slog.Error("EventProcess: failed to lock app", "app", a.Name, "error", err)
 				resp.Success = false
 				resp.Summary[i].Message = "Error at lock application"

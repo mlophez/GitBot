@@ -116,13 +116,18 @@ func (r *RemoteAppManager) List() ([]Application, error) {
 }
 
 // Lock tells the remote agent to lock the application to targetBranch for prID.
-func (r *RemoteAppManager) Lock(app Application, targetBranch string, prID int) error {
+// When force is true, ?force=true is appended to the request URL so the remote
+// agent skips the already-locked check and overwrites the current lock state.
+func (r *RemoteAppManager) Lock(app Application, targetBranch string, prID int, force bool) error {
 	body, err := json.Marshal(remoteLockRequest{Branch: targetBranch, PullRequestId: prID})
 	if err != nil {
 		return err
 	}
 
 	url := fmt.Sprintf("%s/api/v1/apps/%s/lock", r.baseURL, app.Name)
+	if force {
+		url += "?force=true"
+	}
 	req, err := r.newRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("remote agent %q: failed to build request: %w", r.clusterName, err)
