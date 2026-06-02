@@ -40,6 +40,7 @@ func main() {
 	protected := func(h http.Handler) http.Handler { return apiTokenAuth(c.APIToken, h) }
 
 	router := http.NewServeMux()
+	router.HandleFunc("GET /{$}", serveIndex)
 	router.HandleFunc("GET /api/v1/status", status.Status)
 	router.HandleFunc("POST /api/v1/webhook/bitbucket", event.EventCreate(eventQueue, bitbucket, c.WebhookToken))
 	router.Handle("POST /api/v1/notification", protected(event.NotificationHandle(appManager, bitbucket)))

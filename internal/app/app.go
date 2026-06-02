@@ -19,6 +19,15 @@ type Application struct {
 	LastBranch    string   // Branch before the lock was applied (restored on unlock)
 	Environment   string   // Deployment environment (e.g. "dev", "prod")
 	ContainOther  bool     // True when this is an app-of-apps that manages other apps
+
+	// Status is the aggregated, display-ready synchronisation state observed on the
+	// backend (e.g. "Healthy", "Degraded", "OutOfSync", "Progressing", "Missing",
+	// "Suspended", "Unknown"). It is a read-only observed fact recomputed on every
+	// List; it is not part of the lock/unlock state machine.
+	Status string
+	// StatusMessage is the message of the last sync/health error, or empty when the
+	// app is healthy. Like Status, it is a read-only observed fact.
+	StatusMessage string
 }
 
 // Sanitize corrects inconsistent state where the app is marked as locked

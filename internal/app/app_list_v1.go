@@ -22,6 +22,8 @@ type ListResponse struct {
 	Locked        bool     `json:"locked"`
 	PullRequestId int      `json:"pull_request_id"`
 	Environment   string   `json:"environment"`
+	Status        string   `json:"status,omitempty"`         // Aggregated sync/health status (e.g. "Healthy", "OutOfSync")
+	StatusMessage string   `json:"status_message,omitempty"` // Last sync/health error message, empty when healthy
 }
 
 // toListResponse converts a domain Application into its list response form.
@@ -35,6 +37,8 @@ func toListResponse(app Application) ListResponse {
 		Locked:        app.Locked,
 		PullRequestId: app.PullRequestId,
 		Environment:   app.Environment,
+		Status:        app.Status,
+		StatusMessage: app.StatusMessage,
 	}
 }
 

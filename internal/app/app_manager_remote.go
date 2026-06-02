@@ -67,6 +67,8 @@ type remoteAppResponse struct {
 	Locked        bool     `json:"locked"`
 	PullRequestId int      `json:"pull_request_id"`
 	Environment   string   `json:"environment"`
+	Status        string   `json:"status,omitempty"`
+	StatusMessage string   `json:"status_message,omitempty"`
 }
 
 // remoteLockRequest is the JSON body sent to the agent's POST /api/v1/apps/{id}/lock.
@@ -110,6 +112,8 @@ func (r *RemoteAppManager) List() ([]Application, error) {
 			Locked:        item.Locked,
 			PullRequestId: item.PullRequestId,
 			Environment:   item.Environment,
+			Status:        item.Status,
+			StatusMessage: item.StatusMessage,
 		})
 	}
 	return apps, nil

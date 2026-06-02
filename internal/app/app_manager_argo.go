@@ -126,6 +126,23 @@ type argoApp struct {
 			Path           string `json:"path"`
 		} `json:"source"`
 	} `json:"spec"`
+	Status struct {
+		Sync struct {
+			Status string `json:"status"`
+		} `json:"sync"`
+		Health struct {
+			Status  string `json:"status"`
+			Message string `json:"message"`
+		} `json:"health"`
+		Conditions []struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"conditions"`
+		OperationState struct {
+			Phase   string `json:"phase"`
+			Message string `json:"message"`
+		} `json:"operationState"`
+	} `json:"status"`
 }
 
 type argoAppList struct {
@@ -168,7 +185,50 @@ func toApplication(a argoApp) Application {
 		PullRequestId: prID,
 		LastBranch:    a.Metadata.Annotations.Rollback,
 		Environment:   strings.ToLower(env),
+		Status:        deriveStatus(a),
+		StatusMessage: deriveStatusMessage(a),
 	}
+}
+
+// deriveStatus collapses the ArgoCD .status.sync and .status.health fields into a
+// single display-ready value. An unhealthy health status takes precedence over the
+// sync status, so a degraded app is never masked by being reported as OutOfSync.
+// Falls back to "Unknown" when ArgoCD has not yet populated any status.
+func deriveStatus(a argoApp) string {
+	health := a.Status.Health.Status
+	sync := a.Status.Sync.Status
+	if health != "" && health != "Healthy" {
+		return health
+	}
+	if sync != "" && sync != "Synced" {
+		return sync
+	}
+	if health != "" {
+		return health
+	}
+	if sync != "" {
+		return sync
+	}
+	return "Unknown"
+}
+
+// deriveStatusMessage selects the most relevant error message from the ArgoCD status,
+// preferring a failing condition, then a failed operation, then the health message.
+// Returns an empty string when the app reports no problem.
+func deriveStatusMessage(a argoApp) string {
+	for _, c := range a.Status.Conditions {
+		if strings.Contains(strings.ToLower(c.Type), "error") && c.Message != "" {
+			return c.Message
+		}
+	}
+	phase := a.Status.OperationState.Phase
+	if (phase == "Failed" || phase == "Error") && a.Status.OperationState.Message != "" {
+		return a.Status.OperationState.Message
+	}
+	if a.Status.Health.Status != "" && a.Status.Health.Status != "Healthy" {
+		return a.Status.Health.Message
+	}
+	return ""
 }
 
 func toRequest(app Application) argoAppPatch {
