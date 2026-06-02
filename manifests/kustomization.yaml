@@ -8,6 +8,7 @@ resources:
   - gitbot-service.yaml
   - gitbot-rbac.yaml
   - gitbot-deployment.yaml
+  - gitbot-cronjob.yaml
   - gitbot-pdb.yaml
 
 labels:

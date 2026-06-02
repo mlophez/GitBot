@@ -11,6 +11,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"gitbot/internal/app"
 )
 
 // BitbucketClient implements Provider for Bitbucket webhooks and API calls.
@@ -165,6 +167,52 @@ func (b BitbucketClient) GetFilesChanged(repo string, pullRequestId int) ([]stri
 		}
 	}
 	return files, nil
+}
+
+// GetPullRequestState queries the Bitbucket API for the current state of a pull request
+// and translates it to an app.PullRequestState. It performs no policy decision: the
+// Bitbucket states map 1:1 to the domain enum (OPEN, MERGED, DECLINED, SUPERSEDED), and
+// any unrecognised state becomes PullRequestStateUnknown.
+// Used by reconciliation to detect locks held by PRs that are no longer open.
+func (b BitbucketClient) GetPullRequestState(repo string, prId int) (app.PullRequestState, error) {
+	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d", b.getSlug(repo), prId)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return app.PullRequestStateUnknown, err
+	}
+	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return app.PullRequestStateUnknown, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		slog.Info(string(body))
+		return app.PullRequestStateUnknown, fmt.Errorf("GetPullRequestState: unexpected status %d", resp.StatusCode)
+	}
+
+	var respJSON bpPullRequestResponse
+	if err := json.NewDecoder(resp.Body).Decode(&respJSON); err != nil {
+		return app.PullRequestStateUnknown, err
+	}
+
+	switch strings.ToUpper(respJSON.State) {
+	case "OPEN":
+		return app.PullRequestStateOpen, nil
+	case "MERGED":
+		return app.PullRequestStateMerged, nil
+	case "DECLINED":
+		return app.PullRequestStateDeclined, nil
+	case "SUPERSEDED":
+		return app.PullRequestStateSuperseded, nil
+	default:
+		return app.PullRequestStateUnknown, nil
+	}
 }
 
 // WriteComment posts a comment on the pull request. If parentId > 0 the comment
@@ -402,6 +450,10 @@ type bpWebhookRequest struct {
 		UUID        string `json:"uuid"`
 		DisplayName string `json:"display_name"`
 	} `json:"actor"`
+}
+
+type bpPullRequestResponse struct {
+	State string `json:"state"`
 }
 
 type bpDiffStatResponse struct {
