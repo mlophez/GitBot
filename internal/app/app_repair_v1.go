@@ -21,6 +21,28 @@ const (
 	PullRequestStateSuperseded
 )
 
+// String returns the human-readable name of the state, used for logging.
+func (s PullRequestState) String() string {
+	switch s {
+	case PullRequestStateOpen:
+		return "open"
+	case PullRequestStateMerged:
+		return "merged"
+	case PullRequestStateDeclined:
+		return "declined"
+	case PullRequestStateSuperseded:
+		return "superseded"
+	default:
+		return "unknown"
+	}
+}
+
+// LogValue makes slog render the state as its text name instead of the numeric
+// enum value, including in the JSON handler.
+func (s PullRequestState) LogValue() slog.Value {
+	return slog.StringValue(s.String())
+}
+
 // PullRequestStateChecker reports the current state of a pull request.
 // It abstracts the Git provider for reconciliation purposes.
 // Implemented by adapters in the event slice (e.g. BitbucketClient) and wired in cmd.
@@ -60,20 +82,25 @@ func RepairLocks(manager AppManager, checker PullRequestStateChecker) (RepairRes
 		}
 		res.Checked++
 
+		slog.Info("RepairLocks: checking locked app",
+			"app", a.Name, "cluster", a.Cluster, "pullRequest", a.PullRequestId, "branch", a.Branch, "repository", a.Repository)
+
 		state, err := checker.GetPullRequestState(a.Repository, a.PullRequestId)
 		if err != nil {
-			slog.Warn("RepairLocks: failed to query pull request state, skipping",
+			slog.Warn("RepairLocks: failed to query pull request state, keeping lock",
 				"app", a.Name, "cluster", a.Cluster, "pullRequest", a.PullRequestId, "error", err)
 			res.Skipped++
 			continue
 		}
 
 		if !shouldUnlock(state) {
+			slog.Info("RepairLocks: pull request still open, keeping lock",
+				"app", a.Name, "cluster", a.Cluster, "pullRequest", a.PullRequestId, "state", state)
 			res.Skipped++
 			continue
 		}
 
-		slog.Info("RepairLocks: unlocking app with closed pull request",
+		slog.Info("RepairLocks: pull request closed, unlocking app",
 			"app", a.Name, "cluster", a.Cluster, "pullRequest", a.PullRequestId, "state", state)
 		if err := manager.Unlock(a); err != nil {
 			slog.Error("RepairLocks: failed to unlock app",
