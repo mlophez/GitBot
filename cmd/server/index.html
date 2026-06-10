@@ -224,7 +224,9 @@
       </div>
       <div class="spacer"></div>
       <span class="meta" id="meta"></span>
-      <label class="toggle" title="Refrescar automáticamente cada 15s">
+      <!-- Interval combobox: populated from REFRESH_OPTIONS; persisted in localStorage. -->
+      <select id="refreshInterval" title="Intervalo de autorefresco"></select>
+      <label class="toggle" title="Refrescar automáticamente">
         <input type="checkbox" id="autorefresh" checked />
         auto
       </label>
@@ -309,6 +311,30 @@
       if (t) localStorage.setItem(TOKEN_KEY, t);
       else localStorage.removeItem(TOKEN_KEY);
     }
+
+    // ── Auto-refresh interval persistence ───────────────────────────────────
+    // Single source of truth: all available intervals in milliseconds + label.
+    // Default is 15 s (preserves the previous hardcoded behaviour).
+    const REFRESH_KEY = "kubeops.refreshInterval";
+    const REFRESH_DEFAULT_MS = 15000;
+    const REFRESH_OPTIONS = [
+      { ms:   5000, label:  "5s" },
+      { ms:  10000, label: "10s" },
+      { ms:  15000, label: "15s" },
+      { ms:  30000, label: "30s" },
+      { ms:  60000, label:  "1m" },
+      { ms: 300000, label:  "5m" },
+    ];
+
+    // Returns the persisted interval in ms, falling back to the default when
+    // the stored value is absent or not present in REFRESH_OPTIONS.
+    function getRefreshInterval() {
+      const stored = parseInt(localStorage.getItem(REFRESH_KEY), 10);
+      return REFRESH_OPTIONS.some((o) => o.ms === stored) ? stored : REFRESH_DEFAULT_MS;
+    }
+
+    // Persists the chosen interval (milliseconds) to localStorage.
+    function setRefreshInterval(ms) { localStorage.setItem(REFRESH_KEY, String(ms)); }
 
     function apiURL(path) { return new URL(path, window.location.href).toString(); }
 
@@ -595,15 +621,35 @@
     });
     $("tokenInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tokenSave").click(); });
 
-    // Auto-refresh every 15s when enabled and the tab is visible.
+    // ── Refresh-interval combobox ────────────────────────────────────────────
+    // Populate options from the single-source list; restore the persisted value.
+    (function populateRefreshInterval() {
+      const sel = $("refreshInterval");
+      const current = getRefreshInterval();
+      sel.innerHTML = REFRESH_OPTIONS
+        .map((o) => '<option value="' + esc(String(o.ms)) + '"' + (o.ms === current ? ' selected' : '') + '>' + esc(o.label) + '</option>')
+        .join("");
+    })();
+
+    // Auto-refresh: interval driven by the combobox; gated by checkbox and visibility.
     let timer = null;
     function scheduleRefresh() {
       if (timer) clearInterval(timer);
+      // Use the currently selected interval instead of a hardcoded constant.
       timer = setInterval(() => {
         if ($("autorefresh").checked && document.visibilityState === "visible") load(false);
-      }, 15000);
+      }, getRefreshInterval());
     }
     $("autorefresh").addEventListener("change", scheduleRefresh);
+
+    // Persist the new interval and restart the timer immediately on change.
+    $("refreshInterval").addEventListener("change", () => {
+      // Only persist values that match a known option, so a stray/empty
+      // select value never writes a dirty "NaN" entry to localStorage.
+      const ms = parseInt($("refreshInterval").value, 10);
+      if (REFRESH_OPTIONS.some((o) => o.ms === ms)) setRefreshInterval(ms);
+      scheduleRefresh();
+    });
 
     // Boot.
     scheduleRefresh();

@@ -46,7 +46,8 @@ hex values in markup.
 - Single responsive breakpoint at `max-width: 560px`, where card actions go
   full-width and the card header wraps.
 - A sticky, translucent (`backdrop-filter` blur) header holds the brand,
-  auto-refresh toggle, refresh and token buttons.
+  a refresh-interval combobox (`#refreshInterval`), an auto-refresh toggle
+  (`#autorefresh`), a manual refresh button, and a token button.
 
 ## Shared components
 
