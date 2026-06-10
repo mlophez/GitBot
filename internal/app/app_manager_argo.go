@@ -53,7 +53,9 @@ func (a *ArgoAppManager) List() ([]Application, error) {
 		app.Cluster = a.clusterName
 		apps = append(apps, app)
 	}
-	return apps, nil
+	// Validate at the creation point: drop apps that fail validation (and log them)
+	// instead of failing the whole listing on a single malformed record.
+	return keepValidApps(apps), nil
 }
 
 // Lock points the ArgoCD application at targetBranch and records prID as the lock holder.

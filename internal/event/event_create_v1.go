@@ -9,9 +9,11 @@ import (
 )
 
 // EventCreate handles webhook POST requests from any git provider.
-// Parses the incoming webhook payload using the given provider, creates a structured event,
-// and enqueues it for asynchronous processing by the event processor.
-// Returns 401 if the webhook token is invalid, 400 if the payload cannot be parsed.
+// Parses the incoming webhook payload using the given provider — which returns a
+// validated domain event — and enqueues it for asynchronous processing by the
+// event processor.
+// Returns 401 if the webhook token is invalid, 400 if the payload cannot be parsed
+// or the resulting event fails validation.
 func EventCreate(queue Queue, provider Provider, webhookToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := logger.Logger(r.Context())
@@ -30,6 +32,8 @@ func EventCreate(queue Queue, provider Provider, webhookToken string) http.Handl
 			return
 		}
 
+		// ParseEvent returns an already-validated event (validation happens at the
+		// creation point); an invalid event surfaces here as an error → 400.
 		e, err := provider.ParseEvent(r.Header, io.NopCloser(bytes.NewReader(body)))
 		if err != nil {
 			log.Error("EventCreate failed to parse event", "error", err)

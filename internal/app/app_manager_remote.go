@@ -116,7 +116,9 @@ func (r *RemoteAppManager) List() ([]Application, error) {
 			StatusMessage: item.StatusMessage,
 		})
 	}
-	return apps, nil
+	// Validate at the creation point: drop apps that fail validation (and log them)
+	// instead of failing the whole listing on a single malformed record.
+	return keepValidApps(apps), nil
 }
 
 // Lock tells the remote agent to lock the application to targetBranch for prID.

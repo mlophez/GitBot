@@ -71,6 +71,13 @@ func (p *eventProcessor) start() {
 				continue
 			}
 
+			// Validate the response built by the use case before rendering it into a
+			// comment; a structurally incoherent response is dropped, not posted.
+			if err := resp.Validate(); err != nil {
+				slog.Error("eventProcessor: invalid event response, skipping comment", "error", err)
+				continue
+			}
+
 			if err := next.Provider.WriteEventResponse(
 				next.Event.Repository,
 				next.Event.PullRequest.Id,

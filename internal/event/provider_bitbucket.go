@@ -56,18 +56,25 @@ func (b BitbucketClient) ValidateWebhookToken(secret string, headers http.Header
 
 // ParseEvent parses a Bitbucket webhook request into a Event.
 // Sets BotGenerated to true when the actor UUID matches the configured bot account.
-// Returns an error if the request body cannot be decoded.
+// Returns an error if the request body cannot be decoded or the resulting event
+// fails validation. Parsing is the DTO→domain transformation for this slice and is
+// standardized across providers in the Provider interface, so the event is
+// validated here at its creation point; the EventCreate use case maps a validation
+// error to a 400 response.
 func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (Event, error) {
 	var webhook bpWebhookRequest
 	var e Event
 
-	err := json.NewDecoder(body).Decode(&webhook)
-	if err != nil {
+	if err := json.NewDecoder(body).Decode(&webhook); err != nil {
 		return e, err
 	}
 
 	e.BotGenerated = b.botActorUUID != "" && webhook.Actor.UUID == b.botActorUUID
-	e.Repository = fmt.Sprintf("https://bitbucket.org/%s.git", webhook.Repository.FullName)
+	// Only build the repository URL when the payload actually carries a full name;
+	// fabricating "https://bitbucket.org/.git" would slip past Event.Validate.
+	if webhook.Repository.FullName != "" {
+		e.Repository = fmt.Sprintf("https://bitbucket.org/%s.git", webhook.Repository.FullName)
+	}
 	e.ActorID = webhook.Actor.UUID
 	e.ActorName = webhook.Actor.DisplayName
 	e.PullRequest.Id = webhook.PullRequest.Id
@@ -109,7 +116,12 @@ func (b BitbucketClient) ParseEvent(headers http.Header, body io.ReadCloser) (Ev
 		}
 	}
 
-	return e, err
+	// Validate the event at its creation point. The use case turns this error into 400.
+	if err := e.Validate(); err != nil {
+		return e, err
+	}
+
+	return e, nil
 }
 
 // GetData enriches an event with the files changed and commits behind from the Bitbucket API.

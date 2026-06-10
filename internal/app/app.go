@@ -4,6 +4,8 @@
 // and the use cases exposed via HTTP (list, lock, unlock, validate).
 package app
 
+import "fmt"
+
 // Application represents an ArgoCD application tracked by the bot.
 // It is a pure value type — all state transitions are done via methods
 // that return a new copy, with no mutation of the receiver.
@@ -28,6 +30,22 @@ type Application struct {
 	// StatusMessage is the message of the last sync/health error, or empty when the
 	// app is healthy. Like Status, it is a read-only observed fact.
 	StatusMessage string
+}
+
+// Validate reports whether the application satisfies the minimal domain
+// invariants required to be usable by the bot: it must have a name and a
+// repository. It is meant to be called right after an Application is hydrated
+// from an external source (see the List adapters). Lock-state coherence is not
+// enforced here on purpose, so apps read from ArgoCD with legitimate gaps
+// (e.g. PullRequestId left at 0 when unlocked) are not rejected.
+func (app Application) Validate() error {
+	if app.Name == "" {
+		return fmt.Errorf("application name is required")
+	}
+	if app.Repository == "" {
+		return fmt.Errorf("application repository is required")
+	}
+	return nil
 }
 
 // Sanitize corrects inconsistent state where the app is marked as locked

@@ -13,6 +13,8 @@ func makeArgoApp(sync, health, healthMsg string) argoApp {
 	return a
 }
 
+// TestDeriveStatus verifies that deriveStatus collapses sync and health into a single
+// display value, giving precedence to an unhealthy health status over any sync status.
 func TestDeriveStatus(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -38,6 +40,8 @@ func TestDeriveStatus(t *testing.T) {
 	}
 }
 
+// TestDeriveStatusMessage_HealthyHasNoMessage confirms that a healthy, synced app
+// produces an empty StatusMessage even when ArgoCD reports a health detail string.
 func TestDeriveStatusMessage_HealthyHasNoMessage(t *testing.T) {
 	got := toApplication(makeArgoApp("Synced", "Healthy", "all good"))
 	if got.StatusMessage != "" {
@@ -45,6 +49,8 @@ func TestDeriveStatusMessage_HealthyHasNoMessage(t *testing.T) {
 	}
 }
 
+// TestDeriveStatusMessage_FallsBackToHealthMessage checks that when no condition or
+// failed-operation message is present, the health message is used as a fallback.
 func TestDeriveStatusMessage_FallsBackToHealthMessage(t *testing.T) {
 	got := toApplication(makeArgoApp("OutOfSync", "Degraded", "pod crashloop"))
 	if got.StatusMessage != "pod crashloop" {
@@ -52,6 +58,8 @@ func TestDeriveStatusMessage_FallsBackToHealthMessage(t *testing.T) {
 	}
 }
 
+// TestDeriveStatusMessage_PrefersErrorCondition checks that a status condition whose
+// type contains "error" takes priority over the health message.
 func TestDeriveStatusMessage_PrefersErrorCondition(t *testing.T) {
 	a := makeArgoApp("OutOfSync", "Degraded", "health detail")
 	a.Status.Conditions = []struct {
@@ -66,6 +74,8 @@ func TestDeriveStatusMessage_PrefersErrorCondition(t *testing.T) {
 	}
 }
 
+// TestDeriveStatusMessage_PrefersFailedOperationOverHealth checks that a failed
+// ArgoCD sync operation message takes priority over the health message.
 func TestDeriveStatusMessage_PrefersFailedOperationOverHealth(t *testing.T) {
 	a := makeArgoApp("OutOfSync", "Degraded", "health detail")
 	a.Status.OperationState.Phase = "Failed"
