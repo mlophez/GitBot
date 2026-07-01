@@ -22,6 +22,10 @@ rules:
     - applicationsets
     - applicationsets/finalizers
     - applicationsets/status
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingwebhookconfigurations"]
+    resourceNames: ["lock-application-webhook"]
+    verbs: ["get", "update"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -36,3 +40,34 @@ subjects:
   - kind: ServiceAccount
     name: gitbot
     namespace: argocd
+
+---
+# Role: manage the TLS Secret used by the admission webhook, in-namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitbot-webhook-tls
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: gitbot
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitbot-webhook-tls
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: gitbot
+subjects:
+  - kind: ServiceAccount
+    name: gitbot
+    namespace: argocd
+roleRef:
+  kind: Role
+  name: gitbot-webhook-tls
+  apiGroup: rbac.authorization.k8s.io

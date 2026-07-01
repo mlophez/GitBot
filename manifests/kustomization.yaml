@@ -10,6 +10,7 @@ resources:
   - gitbot-deployment.yaml
   - gitbot-cronjob.yaml
   - gitbot-pdb.yaml
+  - gitbot-validating-webhook.yaml
 
 labels:
   - pairs:

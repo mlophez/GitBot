@@ -20,9 +20,11 @@ and it locks the PR to block merges until the deployment is unlocked.
 ## Project layout
 
 - `cmd/server/` — HTTP server entrypoint. `main.go` wires every dependency by
-  hand; `middleware.go` holds request-ID and API-token middleware;
-  `event_processor.go` is the background worker; `web.go` serves the embedded
-  operator panel (`index.html`).
+  hand and, when a Kubernetes client is available, bootstraps the admission
+  webhook TLS (via `pkg/webhooktls`) and starts a second HTTPS listener on port
+  8443 serving the same router as the plain HTTP listener; `middleware.go` holds
+  request-ID and API-token middleware; `event_processor.go` is the background
+  worker; `web.go` serves the embedded operator panel (`index.html`).
 - `cmd/repair/` — entry point for the reconciliation CronJob; wires `RepairLocks`
   from `internal/app/app_repair_v1.go` against the configured clusters.
 - `internal/` — vertical slices, one Go package per business concern. The layout
@@ -38,6 +40,9 @@ and it locks the PR to block merges until the deployment is unlocked.
     SecurityRule, and the env+YAML loader).
   - `internal/logger/` — request-ID-aware structured logging.
 - `pkg/utils/` — generic helpers (`contains`, `IFTernary`).
+- `pkg/webhooktls/` — bootstraps the admission webhook's TLS material: generates a self-signed CA
+  and serving certificate, persists them in a Kubernetes Secret shared across replicas, and injects
+  the CA into the `ValidatingWebhookConfiguration` caBundle at runtime.
 - `pkg/argocd/` — mostly commented out, superseded by `internal/app`. Ignore.
 - `manifests/` — Kubernetes manifests (Kustomize).
 - `tests/` — sample Bitbucket webhook JSON payloads for manual use. The Go test

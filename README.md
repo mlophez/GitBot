@@ -62,6 +62,14 @@ The HTTP server listens on `HTTP_PORT` (default 8080) and exposes:
 - `POST /api/v1/notification` — ArgoCD deployment notifications
 - `POST /api/v1/admission/apps/validate` — Kubernetes admission webhook
 
+When a Kubernetes client is available, the server also starts an HTTPS listener
+on port 8443 serving the same routes; the Kubernetes API server reaches the
+admission webhook (`/api/v1/admission/apps/validate`) over this port. On startup
+the bot self-bootstraps the webhook's TLS certificate (stored in the
+`gitbot-webhook-tls` Secret) and injects its CA into the
+`lock-application-webhook` `ValidatingWebhookConfiguration`. See
+[Lock Application Admission Webhook](docs/usecases/lock-application-admission-webhook.md).
+
 From a PR comment, drive the bot with commands such as `#argo deploy`,
 `#argo deploy dev my-app` or `#argo unlock`.
 

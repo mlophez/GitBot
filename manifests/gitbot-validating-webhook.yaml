@@ -1,0 +1,27 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: lock-application-webhook
+webhooks:
+  - name: lock.applications.argocd.io
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    # Fail closed: preserves the original behaviour — a locked app's targetRevision cannot be
+    # changed while the bot is unavailable.
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["argoproj.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["UPDATE"]
+        resources: ["applications"]
+        scope: "Namespaced"
+    clientConfig:
+      # caBundle is intentionally omitted; the bot injects it at runtime from the CA stored in the
+      # gitbot-webhook-tls Secret (PatchWebhookCABundle on every startup).
+      service:
+        name: gitbot
+        namespace: argocd
+        # Includes CONTEXT_ROOT if that env var is set on the deployment (currently unset).
+        path: "/api/v1/admission/apps/validate"
+        port: 8443

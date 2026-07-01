@@ -5,11 +5,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +20,15 @@ import (
 	"gitbot/internal/config"
 	"gitbot/internal/event"
 	"gitbot/internal/status"
+	"gitbot/pkg/webhooktls"
+)
+
+// Admission webhook identifiers: the Secret that stores the bootstrapped TLS material and the
+// ValidatingWebhookConfiguration whose caBundle is kept in sync with that Secret's CA.
+const (
+	webhookTLSSecret  = "gitbot-webhook-tls"
+	webhookConfigName = "lock-application-webhook"
+	webhookService    = "gitbot"
 )
 
 func main() {
@@ -49,11 +61,42 @@ func main() {
 	router.Handle("POST /api/v1/apps/{id}/unlock", protected(app.UnlockApp(appManager)))
 	router.HandleFunc("POST /api/v1/admission/apps/validate", app.ValidateApp(c.BotKubernetesUsername))
 
-	/* HTTP server */
+	/* Build the shared handler served by both listeners */
 	var handler http.Handler = requestID(router)
 	if c.ContextRoot != "" {
 		handler = http.StripPrefix(c.ContextRoot, handler)
 	}
+
+	/* Admission webhook TLS bootstrap: generate a CA + serving cert (shared across replicas via a
+	   Secret) and inject the CA into the ValidatingWebhookConfiguration caBundle. Best-effort: if it
+	   fails, the bot keeps serving the HTTP API on :HttpPort without the admission webhook. */
+	var tlsSrv *http.Server
+	if c.ClientSet != nil {
+		bootstrapCtx, cancelBootstrap := context.WithTimeout(context.Background(), 30*time.Second)
+		ns := webhookNamespace()
+		dnsNames := []string{
+			fmt.Sprintf("%s.%s.svc", webhookService, ns),
+			fmt.Sprintf("%s.%s.svc.cluster.local", webhookService, ns),
+		}
+
+		bundle, err := webhooktls.EnsureTLSSecret(bootstrapCtx, c.ClientSet, ns, webhookTLSSecret, dnsNames)
+		if err != nil {
+			slog.Error("admission webhook TLS bootstrap failed; serving HTTP only", "error", err)
+		} else if err := webhooktls.PatchWebhookCABundle(bootstrapCtx, c.ClientSet, webhookConfigName, bundle.CACert); err != nil {
+			slog.Error("failed to patch webhook caBundle; serving HTTP only", "error", err)
+		} else if cert, err := tls.X509KeyPair(bundle.ServerCert, bundle.ServerKey); err != nil {
+			slog.Error("failed to load webhook TLS key pair; serving HTTP only", "error", err)
+		} else {
+			tlsSrv = &http.Server{
+				Addr:      ":8443",
+				Handler:   handler, // same router (requestID + optional CONTEXT_ROOT strip) as :8080
+				TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
+			}
+		}
+		cancelBootstrap()
+	}
+
+	/* Start the listeners: plain HTTP always; HTTPS only when the webhook bootstrap succeeded */
 	srv := &http.Server{Addr: ":" + c.HttpPort, Handler: handler}
 	go func() {
 		slog.Info("Starting server", "port", c.HttpPort, "contextRoot", c.ContextRoot)
@@ -62,6 +105,14 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+	if tlsSrv != nil {
+		go func() {
+			slog.Info("Starting admission webhook HTTPS server", "port", 8443)
+			if err := tlsSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("Error starting HTTPS server", "error", err)
+			}
+		}()
+	}
 
 	/* Event processing */
 	processor := newEventProcessor(eventQueue, event.EventProcess(appManager), c.ClusterName)
@@ -77,6 +128,11 @@ func main() {
 	slog.Info("Server shutdown...")
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("Server shutdown failed", "error", err)
+	}
+	if tlsSrv != nil {
+		if err := tlsSrv.Shutdown(ctx); err != nil {
+			slog.Error("HTTPS server shutdown failed", "error", err)
+		}
 	}
 
 	slog.Info("Shutdown event queue...")
@@ -119,4 +175,14 @@ func buildAppManager(c *config.Config, local app.AppManager) app.AppManager {
 	}
 
 	return multi
+}
+
+// webhookNamespace reads the current pod namespace from the service-account projection,
+// falling back to "argocd" for local development.
+func webhookNamespace() string {
+	data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "argocd"
+	}
+	return strings.TrimSpace(string(data))
 }
