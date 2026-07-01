@@ -38,5 +38,11 @@ pipelines:
             export AWS_SECRET_ACCESS_KEY=${BITBUCKET_AWS_SECRET_ACCESS_KEY}
             aws ecr get-login-password --region eu-south-2 | docker login --username AWS --password-stdin ${REPOSITORY}
         - |
-            docker build --platform linux/amd64  -f Containerfile -t ${REPOSITORY}/${IMAGE}:${TAG} .
-            docker push ${REPOSITORY}/${IMAGE}:${TAG}
+            # buildx needs a container-driver builder to build multiple platforms at once.
+            docker buildx create --use --name multiarch --driver docker-container
+            # Cross-compiled per platform in the Containerfile; --push uploads one manifest-list tag.
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f Containerfile \
+              -t ${REPOSITORY}/${IMAGE}:${TAG} \
+              --push .
