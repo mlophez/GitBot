@@ -19,6 +19,7 @@ import (
 	"gitbot/internal/app"
 	"gitbot/internal/config"
 	"gitbot/internal/event"
+	"gitbot/internal/preview"
 	"gitbot/internal/status"
 	"gitbot/pkg/webhooktls"
 )
@@ -60,6 +61,9 @@ func main() {
 	router.Handle("POST /api/v1/apps/{id}/lock", protected(app.LockApp(appManager)))
 	router.Handle("POST /api/v1/apps/{id}/unlock", protected(app.UnlockApp(appManager)))
 	router.HandleFunc("POST /api/v1/admission/apps/validate", app.ValidateApp(c.BotKubernetesUsername))
+	// ArgoCD ApplicationSet plugin generator (fixed path imposed by ArgoCD). Uses its own
+	// token and fails closed: without ARGOCD_PLUGIN_TOKEN it answers 503, never open.
+	router.Handle("POST /api/v1/getparams.execute", requiredTokenAuth(c.ArgoCDPluginToken, preview.GetParams(bitbucket)))
 
 	/* Build the shared handler served by both listeners */
 	var handler http.Handler = requestID(router)

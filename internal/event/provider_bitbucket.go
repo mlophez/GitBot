@@ -2,6 +2,7 @@ package event
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,9 +11,19 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"gitbot/internal/app"
+	"gitbot/internal/preview"
+)
+
+const (
+	// bitbucketAPIBaseURL is the root of the Bitbucket Cloud REST API v2.
+	bitbucketAPIBaseURL = "https://api.bitbucket.org/2.0"
+	// bitbucketMaxPages bounds how many result pages a listing follows, so a
+	// misbehaving "next" chain cannot loop forever.
+	bitbucketMaxPages = 100
 )
 
 // BitbucketClient implements Provider for Bitbucket webhooks and API calls.
@@ -21,6 +32,7 @@ import (
 type BitbucketClient struct {
 	bearerToken  string
 	botActorUUID string // UUID of the bot's own Bitbucket account; events from this actor are ignored
+	apiBaseURL   string // Bitbucket API root used by ListOpenPullRequests; overridden in tests
 }
 
 // NewBitbucketClient creates a BitbucketClient authenticated with the given bearer token.
@@ -30,6 +42,7 @@ func NewBitbucketClient(token string, botActorUUID string) *BitbucketClient {
 	return &BitbucketClient{
 		bearerToken:  token,
 		botActorUUID: botActorUUID,
+		apiBaseURL:   bitbucketAPIBaseURL,
 	}
 }
 
@@ -213,18 +226,108 @@ func (b BitbucketClient) GetPullRequestState(repo string, prId int) (app.PullReq
 		return app.PullRequestStateUnknown, err
 	}
 
-	switch strings.ToUpper(respJSON.State) {
+	return bbPullRequestState(respJSON.State), nil
+}
+
+// bbPullRequestState translates a Bitbucket pull request state into the domain enum.
+// The states map 1:1 (OPEN, MERGED, DECLINED, SUPERSEDED); anything else becomes
+// PullRequestStateUnknown.
+func bbPullRequestState(state string) app.PullRequestState {
+	switch strings.ToUpper(state) {
 	case "OPEN":
-		return app.PullRequestStateOpen, nil
+		return app.PullRequestStateOpen
 	case "MERGED":
-		return app.PullRequestStateMerged, nil
+		return app.PullRequestStateMerged
 	case "DECLINED":
-		return app.PullRequestStateDeclined, nil
+		return app.PullRequestStateDeclined
 	case "SUPERSEDED":
-		return app.PullRequestStateSuperseded, nil
+		return app.PullRequestStateSuperseded
 	default:
-		return app.PullRequestStateUnknown, nil
+		return app.PullRequestStateUnknown
 	}
+}
+
+// ListOpenPullRequests returns every open pull request of workspace/repo, following
+// the Bitbucket pagination ("next") until the last page. It implements
+// preview.PullRequestLister: each pull request is translated (including its draft
+// flag) and validated at this creation point, and no eligibility filtering is done
+// here.
+//
+// It returns either the complete list or an error, never a partial one: a network
+// error, a non-200 status (401, 429, 5xx, ...), an undecodable page, an invalid pull
+// request, a "next" link outside the Bitbucket API or a pagination chain longer than
+// bitbucketMaxPages all fail the whole listing. An invalid record fails the listing
+// instead of being skipped because a missing pull request would make ArgoCD delete
+// its preview.
+func (b BitbucketClient) ListOpenPullRequests(ctx context.Context, workspace, repo string) ([]preview.PullRequest, error) {
+	next := fmt.Sprintf("%s/repositories/%s/%s/pullrequests?state=OPEN&pagelen=50",
+		b.apiBaseURL, url.PathEscape(workspace), url.PathEscape(repo))
+
+	var prs []preview.PullRequest
+	for page := 1; next != ""; page++ {
+		if page > bitbucketMaxPages {
+			return nil, fmt.Errorf("ListOpenPullRequests: more than %d pages, aborting", bitbucketMaxPages)
+		}
+		// Never send the bearer token outside the Bitbucket API, whatever "next" says.
+		if !strings.HasPrefix(next, b.apiBaseURL+"/") {
+			return nil, fmt.Errorf("ListOpenPullRequests: unexpected next page URL %q", next)
+		}
+
+		body, err := b.getPullRequestPage(ctx, next)
+		if err != nil {
+			return nil, fmt.Errorf("ListOpenPullRequests: page %d: %w", page, err)
+		}
+
+		for _, v := range body.Values {
+			pr := preview.PullRequest{
+				Number:       v.Id,
+				Title:        v.Title,
+				Branch:       v.Source.Branch.Name,
+				TargetBranch: v.Destination.Branch.Name,
+				HeadSHA:      v.Source.Commit.Hash,
+				Author:       v.Author.Nickname,
+				State:        bbPullRequestState(v.State),
+				Draft:        v.Draft,
+			}
+			// Validate at the creation point; one invalid record fails the whole list.
+			if err := pr.Validate(); err != nil {
+				return nil, fmt.Errorf("ListOpenPullRequests: page %d: %w", page, err)
+			}
+			prs = append(prs, pr)
+		}
+		next = body.Next
+	}
+	return prs, nil
+}
+
+// getPullRequestPage fetches and decodes one page of the pull request listing.
+// Any status other than 200 or an undecodable body is returned as an error.
+func (b BitbucketClient) getPullRequestPage(ctx context.Context, pageURL string) (bpPullRequestListResponse, error) {
+	var page bpPullRequestListResponse
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return page, err
+	}
+	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return page, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		slog.Info(string(body))
+		return page, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+		return page, fmt.Errorf("decode response: %w", err)
+	}
+	return page, nil
 }
 
 // WriteComment posts a comment on the pull request. If parentId > 0 the comment
@@ -466,6 +569,34 @@ type bpWebhookRequest struct {
 
 type bpPullRequestResponse struct {
 	State string `json:"state"`
+}
+
+// bpPullRequestListResponse is one page of GET /repositories/{workspace}/{repo}/pullrequests.
+// Next holds the absolute URL of the following page and is empty on the last one.
+type bpPullRequestListResponse struct {
+	Values []struct {
+		Id     int    `json:"id"`
+		Title  string `json:"title"`
+		State  string `json:"state"`
+		Draft  bool   `json:"draft"`
+		Author struct {
+			Nickname string `json:"nickname"`
+		} `json:"author"`
+		Source struct {
+			Branch struct {
+				Name string `json:"name"`
+			} `json:"branch"`
+			Commit struct {
+				Hash string `json:"hash"`
+			} `json:"commit"`
+		} `json:"source"`
+		Destination struct {
+			Branch struct {
+				Name string `json:"name"`
+			} `json:"branch"`
+		} `json:"destination"`
+	} `json:"values"`
+	Next string `json:"next"`
 }
 
 type bpDiffStatResponse struct {

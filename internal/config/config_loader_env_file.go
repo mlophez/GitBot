@@ -10,7 +10,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-
 )
 
 const kubeconfig = "/home/mlr/Documents/Code/gitbot/kubeconfig"
@@ -66,6 +65,7 @@ func (l *EnvConfigLoader) Load() *Config {
 		Clusters:              clusters,
 		BotKubernetesUsername: os.Getenv("BOT_KUBERNETES_USERNAME"),
 		BitbucketBotUUID:      os.Getenv("BITBUCKET_BOT_UUID"),
+		ArgoCDPluginToken:     os.Getenv("ARGOCD_PLUGIN_TOKEN"),
 	}
 }
 
@@ -95,8 +95,8 @@ type configFile struct {
 	Clusters []struct {
 		Name string `yaml:"name"`
 		Auth struct {
-			Type                string `yaml:"type"`
-			URL                 string `yaml:"url"`
+			Type                  string `yaml:"type"`
+			URL                   string `yaml:"url"`
 			InsecureSkipTLSVerify bool   `yaml:"insecure-skip-tls-verify"`
 		} `yaml:"auth"`
 	} `yaml:"clusters"`
@@ -122,8 +122,8 @@ func (c configFile) clusterConfigs() []ClusterConfig {
 		result = append(result, ClusterConfig{
 			Name: cl.Name,
 			Auth: ClusterAuth{
-				Type:                cl.Auth.Type,
-				URL:                 cl.Auth.URL,
+				Type:                  cl.Auth.Type,
+				URL:                   cl.Auth.URL,
 				InsecureSkipTLSVerify: cl.Auth.InsecureSkipTLSVerify,
 			},
 		})

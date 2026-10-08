@@ -2,7 +2,9 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -37,6 +39,28 @@ func apiTokenAuth(token string, next http.Handler) http.Handler {
 		const prefix = "Bearer "
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, prefix) || auth[len(prefix):] != token {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requiredTokenAuth is a middleware that enforces Bearer token authentication and,
+// unlike apiTokenAuth, fails closed: when token is empty the endpoint is considered
+// not configured and every request is rejected with 503 instead of being let through.
+// Returns 401 if the Authorization header is missing or does not match. In both
+// cases next is never called. The comparison runs in constant time.
+func requiredTokenAuth(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token == "" {
+			slog.Error("requiredTokenAuth: endpoint token not configured, rejecting request", "path", r.URL.Path)
+			http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		const prefix = "Bearer "
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, prefix) || subtle.ConstantTimeCompare([]byte(auth[len(prefix):]), []byte(token)) != 1 {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}

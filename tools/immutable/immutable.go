@@ -35,6 +35,7 @@ var ProtectedTypes = []string{
 	"gitbot/internal/event.Event",
 	"gitbot/internal/event.PullRequest",
 	"gitbot/internal/event.EventResponse",
+	"gitbot/internal/preview.PullRequest",
 }
 
 // Analyzer is the analyzer configured with ProtectedTypes. It is the one run by

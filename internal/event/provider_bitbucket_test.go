@@ -1,11 +1,16 @@
 package event
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+
+	"gitbot/internal/app"
 )
 
 // bitbucketBody builds a minimal Bitbucket webhook JSON payload with the given
@@ -71,6 +76,159 @@ func TestParseEventValidatesAtCreation(t *testing.T) {
 		_, err := client.ParseEvent(headerWithEventKey("repo:push"), bitbucketBody("org/repo", 0))
 		if err != nil {
 			t.Fatalf("ParseEvent() error = %v, want nil for unknown event", err)
+		}
+	})
+}
+
+// bbListPR renders one pull request object of the Bitbucket listing response.
+func bbListPR(id int, draft bool, target string) string {
+	return fmt.Sprintf(`{"id": %d, "title": "PR %d", "state": "OPEN", "draft": %t,
+		"author": {"nickname": "jdoe"},
+		"source": {"branch": {"name": "feature/%d"}, "commit": {"hash": "abc123def456"}},
+		"destination": {"branch": {"name": %q}}}`, id, id, draft, id, target)
+}
+
+// bbPage is one page served by the fake Bitbucket API: status overrides the 200
+// answer, raw replaces the generated body, otherwise values (comma-separated pull
+// request objects) are wrapped in a listing response with its "next" link.
+type bbPage struct {
+	status int
+	values string // comma-separated pull request objects
+	raw    string // raw body, used instead of values when non-empty
+}
+
+// bbListServer is a fake Bitbucket API that serves the given pages in order (page N
+// answers ...pullrequests?page=N, with "next" chaining to N+1). It records how many
+// requests it received, the last Authorization header and the first query string.
+type bbListServer struct {
+	*httptest.Server
+	requests int
+	auth     string
+	query    string
+}
+
+// newBBListServer starts a bbListServer for pages and closes it when the test ends.
+func newBBListServer(t *testing.T, pages []bbPage) *bbListServer {
+	t.Helper()
+	s := &bbListServer{}
+	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.requests++
+		s.auth = r.Header.Get("Authorization")
+		if s.query == "" {
+			s.query = r.URL.RawQuery
+		}
+		n, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		if n == 0 {
+			n = 1
+		}
+		p := pages[n-1]
+		if p.status != 0 && p.status != http.StatusOK {
+			w.WriteHeader(p.status)
+			return
+		}
+		if p.raw != "" {
+			io.WriteString(w, p.raw)
+			return
+		}
+		next := ""
+		if n < len(pages) {
+			next = fmt.Sprintf("%s/2.0/repositories/firmapro/platform/pullrequests?state=OPEN&pagelen=50&page=%d", s.URL, n+1)
+		}
+		fmt.Fprintf(w, `{"values": [%s], "next": %q}`, p.values, next)
+	}))
+	t.Cleanup(s.Close)
+	return s
+}
+
+// client returns a BitbucketClient pointed at the fake API.
+func (s *bbListServer) client() BitbucketClient {
+	return BitbucketClient{bearerToken: "secret", apiBaseURL: s.URL + "/2.0"}
+}
+
+// TestListOpenPullRequests checks the listing adapter: it follows pagination to
+// the end, translates every field including the draft flag, and returns an error
+// (never a partial list) on any failure, so the preview generator can fail closed.
+func TestListOpenPullRequests(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("follows every page and maps all fields", func(t *testing.T) {
+		srv := newBBListServer(t, []bbPage{
+			{values: bbListPR(1, false, "dev") + "," + bbListPR(2, true, "dev")},
+			{values: bbListPR(3, false, "main")},
+			{values: bbListPR(4, false, "dev")},
+		})
+
+		prs, err := srv.client().ListOpenPullRequests(ctx, "firmapro", "platform")
+		if err != nil {
+			t.Fatalf("ListOpenPullRequests() error = %v", err)
+		}
+		if srv.requests != 3 {
+			t.Errorf("requests = %d, want 3", srv.requests)
+		}
+		if len(prs) != 4 {
+			t.Fatalf("got %d pull requests, want 4", len(prs))
+		}
+		if srv.auth != "Bearer secret" {
+			t.Errorf("Authorization = %q, want Bearer secret", srv.auth)
+		}
+		if !strings.Contains(srv.query, "state=OPEN") {
+			t.Errorf("first query = %q, want state=OPEN", srv.query)
+		}
+
+		first := prs[0]
+		if first.Number != 1 || first.Title != "PR 1" || first.Branch != "feature/1" ||
+			first.TargetBranch != "dev" || first.HeadSHA != "abc123def456" || first.Author != "jdoe" ||
+			first.State != app.PullRequestStateOpen || first.Draft {
+			t.Errorf("first = %+v, unexpected mapping", first)
+		}
+		if !prs[1].Draft {
+			t.Errorf("prs[1].Draft = false, want true")
+		}
+		if prs[2].TargetBranch != "main" {
+			t.Errorf("prs[2].TargetBranch = %q, want main", prs[2].TargetBranch)
+		}
+	})
+
+	for _, status := range []int{http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusInternalServerError} {
+		t.Run(fmt.Sprintf("status %d on first page returns error", status), func(t *testing.T) {
+			srv := newBBListServer(t, []bbPage{{status: status}})
+
+			prs, err := srv.client().ListOpenPullRequests(ctx, "firmapro", "platform")
+			if err == nil || prs != nil {
+				t.Errorf("got (%v, %v), want (nil, error)", prs, err)
+			}
+		})
+	}
+
+	failingSecondPages := []struct {
+		name string
+		page bbPage
+	}{
+		{"server error", bbPage{status: http.StatusInternalServerError}},
+		{"invalid JSON", bbPage{raw: `{"values": [`}},
+		{"invalid pull request", bbPage{values: bbListPR(0, false, "dev")}},
+	}
+	for _, tt := range failingSecondPages {
+		t.Run("second page "+tt.name+" returns error, not a partial list", func(t *testing.T) {
+			srv := newBBListServer(t, []bbPage{{values: bbListPR(1, false, "dev")}, tt.page})
+
+			prs, err := srv.client().ListOpenPullRequests(ctx, "firmapro", "platform")
+			if err == nil || prs != nil {
+				t.Errorf("got (%v, %v), want (nil, error)", prs, err)
+			}
+		})
+	}
+
+	t.Run("next page outside the API is not followed", func(t *testing.T) {
+		foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Errorf("foreign host was called with Authorization %q", r.Header.Get("Authorization"))
+		}))
+		defer foreign.Close()
+		srv := newBBListServer(t, []bbPage{{raw: fmt.Sprintf(`{"values": [%s], "next": %q}`, bbListPR(1, false, "dev"), foreign.URL+"/2.0/x")}})
+
+		prs, err := srv.client().ListOpenPullRequests(ctx, "firmapro", "platform")
+		if err == nil || prs != nil {
+			t.Errorf("got (%v, %v), want (nil, error)", prs, err)
 		}
 	})
 }

@@ -18,4 +18,5 @@ type Config struct {
 	Clusters              []ClusterConfig // Parsed from config.yaml clusters section
 	BotKubernetesUsername string          // Kubernetes username of the bot service account (BOT_KUBERNETES_USERNAME)
 	BitbucketBotUUID      string          // Bitbucket UUID of the bot account used to post comments (BITBUCKET_BOT_UUID)
+	ArgoCDPluginToken     string          // Bearer token shared with the ArgoCD plugin generator (ARGOCD_PLUGIN_TOKEN); empty disables the endpoint
 }
