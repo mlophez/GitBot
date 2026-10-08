@@ -10,8 +10,8 @@ and it locks the PR to block merges until the deployment is unlocked.
 
 ## Stack
 
-- Go 1.22.2 — Go module name is `gitbot` (all internal imports use `gitbot/internal/...`)
-- Standard library `net/http` with Go 1.22 routing (`router.HandleFunc("METHOD /path", ...)`)
+- Go 1.26 — Go module name is `gitbot` (all internal imports use `gitbot/internal/...`)
+- Standard library `net/http` with Go 1.22+ routing (`router.HandleFunc("METHOD /path", ...)`)
 - Structured logging via the standard library `log/slog` (JSON handler)
 - Kubernetes / ArgoCD: ArgoCD `Application` custom resources patched through the Kubernetes API
 - Bitbucket Cloud REST API for PR data and comments

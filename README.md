@@ -11,7 +11,7 @@ embedded operator web panel and a Kubernetes admission webhook.
 
 ## Requirements
 
-- Go 1.22.2 (module name is `gitbot`)
+- Go 1.26 (module name is `gitbot`)
 - A Kubernetes cluster with ArgoCD installed (the bot patches ArgoCD
   `Application` resources via the Kubernetes API)
 - `kubectl` with access to the target cluster

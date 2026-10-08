@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.22.2-alpine as builder
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine as builder
 RUN apk --no-cache add ca-certificates
 # BuildKit/Podman inject these automatically per --platform target.
 ARG TARGETOS

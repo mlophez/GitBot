@@ -6,6 +6,10 @@ Use the standard Go toolchain only; there is no external linter configured.
 
 - Format before committing: `gofmt -w .`
 - Static analysis: `go vet ./...`
+- Domain immutability: the `immutable` analyzer (`tools/immutable`) runs as part
+  of `go test ./...` over every package of the module and fails on field
+  assignments that mutate a domain object the enclosing function does not own
+  (see "Domain objects" below).
 
 ## Naming conventions
 
