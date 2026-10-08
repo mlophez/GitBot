@@ -59,7 +59,7 @@ func (l *EnvConfigLoader) Load() *Config {
 		ContextRoot:           os.Getenv("CONTEXT_ROOT"),
 		WebhookToken:          os.Getenv("WEBHOOK_TOKEN"),
 		APIToken:              os.Getenv("API_TOKEN"),
-		BitbucketBearerToken:  os.Getenv("BITBUCKET_BEARER_TOKEN"),
+		BitbucketTokens:       NewBitbucketTokens(os.Getenv("BITBUCKET_BEARER_TOKEN"), os.Environ()),
 		ClusterName:           os.Getenv("CLUSTER_NAME"),
 		ClientSet:             newKubernetesClient(),
 		Clusters:              clusters,

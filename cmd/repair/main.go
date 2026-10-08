@@ -24,7 +24,7 @@ func main() {
 	appManager := buildAppManager(c, localManager)
 
 	// BitbucketClient satisfies app.PullRequestStateChecker structurally.
-	bitbucket := event.NewBitbucketClient(c.BitbucketBearerToken, c.BitbucketBotUUID)
+	bitbucket := event.NewBitbucketClient(c.BitbucketTokens, c.BitbucketBotUUID)
 
 	slog.Info("repair: starting lock reconciliation", "cluster", c.ClusterName)
 

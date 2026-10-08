@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"gitbot/internal/app"
+	"gitbot/internal/config"
 	"gitbot/internal/preview"
 )
 
@@ -30,17 +31,19 @@ const (
 // It parses incoming webhook payloads, enriches events with diff and commit data,
 // and writes comments back to pull requests via the Bitbucket REST API.
 type BitbucketClient struct {
-	bearerToken  string
-	botActorUUID string // UUID of the bot's own Bitbucket account; events from this actor are ignored
-	apiBaseURL   string // Bitbucket API root used by ListOpenPullRequests; overridden in tests
+	tokens       config.BitbucketTokens // resolves the bearer token per repository
+	botActorUUID string                 // UUID of the bot's own Bitbucket account; events from this actor are ignored
+	apiBaseURL   string                 // Bitbucket API root used by ListOpenPullRequests; overridden in tests
 }
 
-// NewBitbucketClient creates a BitbucketClient authenticated with the given bearer token.
+// NewBitbucketClient creates a BitbucketClient that authenticates each API call with
+// the token tokens resolves for the target repository (repository-specific token or
+// the BITBUCKET_BEARER_TOKEN fallback).
 // botActorUUID is optional: when non-empty, webhook events authored by that UUID are
 // discarded so the bot does not react to its own comments.
-func NewBitbucketClient(token string, botActorUUID string) *BitbucketClient {
+func NewBitbucketClient(tokens config.BitbucketTokens, botActorUUID string) *BitbucketClient {
 	return &BitbucketClient{
-		bearerToken:  token,
+		tokens:       tokens,
 		botActorUUID: botActorUUID,
 		apiBaseURL:   bitbucketAPIBaseURL,
 	}
@@ -156,13 +159,14 @@ func (b BitbucketClient) GetData(e Event) (Event, error) {
 
 // GetFilesChanged returns the list of file paths modified in the given pull request.
 func (b BitbucketClient) GetFilesChanged(repo string, pullRequestId int) ([]string, error) {
-	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d/diffstat", b.getSlug(repo), pullRequestId)
+	slug := b.getSlug(repo)
+	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d/diffstat", slug, pullRequestId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return []string{}, err
 	}
-	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+	req.Header.Add("Authorization", "Bearer "+b.tokenForSlug(slug))
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -200,13 +204,14 @@ func (b BitbucketClient) GetFilesChanged(repo string, pullRequestId int) ([]stri
 // any unrecognised state becomes PullRequestStateUnknown.
 // Used by reconciliation to detect locks held by PRs that are no longer open.
 func (b BitbucketClient) GetPullRequestState(repo string, prId int) (app.PullRequestState, error) {
-	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d", b.getSlug(repo), prId)
+	slug := b.getSlug(repo)
+	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d", slug, prId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return app.PullRequestStateUnknown, err
 	}
-	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+	req.Header.Add("Authorization", "Bearer "+b.tokenForSlug(slug))
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -263,6 +268,8 @@ func (b BitbucketClient) ListOpenPullRequests(ctx context.Context, workspace, re
 	next := fmt.Sprintf("%s/repositories/%s/%s/pullrequests?state=OPEN&pagelen=50",
 		b.apiBaseURL, url.PathEscape(workspace), url.PathEscape(repo))
 
+	token := b.tokens.For(workspace, repo)
+
 	var prs []preview.PullRequest
 	for page := 1; next != ""; page++ {
 		if page > bitbucketMaxPages {
@@ -273,7 +280,7 @@ func (b BitbucketClient) ListOpenPullRequests(ctx context.Context, workspace, re
 			return nil, fmt.Errorf("ListOpenPullRequests: unexpected next page URL %q", next)
 		}
 
-		body, err := b.getPullRequestPage(ctx, next)
+		body, err := b.getPullRequestPage(ctx, next, token)
 		if err != nil {
 			return nil, fmt.Errorf("ListOpenPullRequests: page %d: %w", page, err)
 		}
@@ -300,16 +307,17 @@ func (b BitbucketClient) ListOpenPullRequests(ctx context.Context, workspace, re
 	return prs, nil
 }
 
-// getPullRequestPage fetches and decodes one page of the pull request listing.
+// getPullRequestPage fetches and decodes one page of the pull request listing,
+// authenticated with token.
 // Any status other than 200 or an undecodable body is returned as an error.
-func (b BitbucketClient) getPullRequestPage(ctx context.Context, pageURL string) (bpPullRequestListResponse, error) {
+func (b BitbucketClient) getPullRequestPage(ctx context.Context, pageURL, token string) (bpPullRequestListResponse, error) {
 	var page bpPullRequestListResponse
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		return page, err
 	}
-	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+	req.Header.Add("Authorization", "Bearer "+token)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -333,7 +341,8 @@ func (b BitbucketClient) getPullRequestPage(ctx context.Context, pageURL string)
 // WriteComment posts a comment on the pull request. If parentId > 0 the comment
 // is posted as a reply to that comment thread.
 func (b BitbucketClient) WriteComment(repo string, prId int, parentId int, msg string) error {
-	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d/comments", b.getSlug(repo), prId)
+	slug := b.getSlug(repo)
+	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/pullrequests/%d/comments", slug, prId)
 
 	var payload []byte
 	if parentId > 0 {
@@ -360,7 +369,7 @@ func (b BitbucketClient) WriteComment(repo string, prId int, parentId int, msg s
 		return err
 	}
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+	req.Header.Add("Authorization", "Bearer "+b.tokenForSlug(slug))
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -491,14 +500,15 @@ func bbStatusUpper(success bool) string {
 
 // CompareBranchCommitTotal returns the number of commits that exclude is behind include.
 func (b BitbucketClient) CompareBranchCommitTotal(repository string, include string, exclude string) (int, error) {
-	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/commits?include=%s&exclude=%s", b.getSlug(repository), include, exclude)
+	slug := b.getSlug(repository)
+	url := fmt.Sprintf("https://api.bitbucket.org/2.0/repositories/%s/commits?include=%s&exclude=%s", slug, include, exclude)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return 0, err
 	}
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", "Bearer "+b.bearerToken)
+	req.Header.Add("Authorization", "Bearer "+b.tokenForSlug(slug))
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -518,6 +528,13 @@ func (b BitbucketClient) CompareBranchCommitTotal(repository string, include str
 		return 0, err
 	}
 	return len(result.Values), nil
+}
+
+// tokenForSlug returns the bearer token for a "workspace/repo" slug, as resolved
+// by the configured BitbucketTokens.
+func (b BitbucketClient) tokenForSlug(slug string) string {
+	workspace, repo, _ := strings.Cut(slug, "/")
+	return b.tokens.For(workspace, repo)
 }
 
 func (b BitbucketClient) getSlug(repo string) string {

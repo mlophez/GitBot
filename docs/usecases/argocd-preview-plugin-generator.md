@@ -26,7 +26,10 @@ template does not change when switching generators.
 - `ARGOCD_PLUGIN_TOKEN` is set on the bot (key in the `gitbot` Secret consumed through `envFrom`
   in `manifests/gitbot-deployment.yaml`). It is a token dedicated to this endpoint, distinct from
   `API_TOKEN` and `WEBHOOK_TOKEN`.
-- `BITBUCKET_BEARER_TOKEN` can read pull requests of the target repository.
+- The bot has a Bitbucket token that can read pull requests of the target repository:
+  `BITBUCKET_<WORKSPACE>_<REPO>_TOKEN` (e.g. `BITBUCKET_FIRMAPRO_PLATFORM_TOKEN`, a repository
+  access token of `firmapro/platform` with pull request read scope), or the fallback
+  `BITBUCKET_BEARER_TOKEN` if that one has access.
 - ArgoCD holds the same token in a Secret and references it from the plugin ConfigMap (see
   [ArgoCD-side configuration](#argocd-side-configuration)).
 

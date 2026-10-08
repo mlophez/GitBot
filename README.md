@@ -32,6 +32,8 @@ embedded operator web panel and a Kubernetes admission webhook.
    ```ini
    HTTP_PORT=8080
    BITBUCKET_BEARER_TOKEN=<bitbucket-api-token>
+   # Optional, one per repository: BITBUCKET_<WORKSPACE>_<REPO>_TOKEN
+   # BITBUCKET_FIRMAPRO_PLATFORM_TOKEN=<repository-access-token>
    CONFIG_FILE=config.yaml
    CLUSTER_NAME=<fallback-env-label>
    ```

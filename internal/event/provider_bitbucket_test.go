@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"gitbot/internal/app"
+	"gitbot/internal/config"
 )
 
 // bitbucketBody builds a minimal Bitbucket webhook JSON payload with the given
@@ -38,7 +39,7 @@ func headerWithEventKey(key string) http.Header {
 // returns a validation error, and an irrelevant (unknown-type) webhook is accepted
 // even without a pull request so it can be discarded downstream.
 func TestParseEventValidatesAtCreation(t *testing.T) {
-	client := NewBitbucketClient("token", "")
+	client := NewBitbucketClient(config.BitbucketTokens{Default: "token"}, "")
 
 	t.Run("maps and accepts a created event", func(t *testing.T) {
 		e, err := client.ParseEvent(headerWithEventKey("pullrequest:created"), bitbucketBody("org/repo", 5))
@@ -142,7 +143,7 @@ func newBBListServer(t *testing.T, pages []bbPage) *bbListServer {
 
 // client returns a BitbucketClient pointed at the fake API.
 func (s *bbListServer) client() BitbucketClient {
-	return BitbucketClient{bearerToken: "secret", apiBaseURL: s.URL + "/2.0"}
+	return BitbucketClient{tokens: config.BitbucketTokens{Default: "secret"}, apiBaseURL: s.URL + "/2.0"}
 }
 
 // TestListOpenPullRequests checks the listing adapter: it follows pagination to
@@ -186,6 +187,19 @@ func TestListOpenPullRequests(t *testing.T) {
 		}
 		if prs[2].TargetBranch != "main" {
 			t.Errorf("prs[2].TargetBranch = %q, want main", prs[2].TargetBranch)
+		}
+	})
+
+	t.Run("uses the repository-specific token when configured", func(t *testing.T) {
+		srv := newBBListServer(t, []bbPage{{values: bbListPR(1, false, "dev")}})
+		client := srv.client()
+		client.tokens = config.NewBitbucketTokens("default", []string{"BITBUCKET_FIRMAPRO_PLATFORM_TOKEN=platform-token"})
+
+		if _, err := client.ListOpenPullRequests(ctx, "firmapro", "platform"); err != nil {
+			t.Fatalf("ListOpenPullRequests() error = %v", err)
+		}
+		if srv.auth != "Bearer platform-token" {
+			t.Errorf("Authorization = %q, want Bearer platform-token", srv.auth)
 		}
 	})
 

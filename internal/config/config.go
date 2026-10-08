@@ -12,7 +12,7 @@ type Config struct {
 	WebhookToken          string // Shared secret for validating incoming webhooks (WEBHOOK_TOKEN env var)
 	APIToken              string // Bearer token required on all API requests (API_TOKEN env var)
 	SecurityRules         []SecurityRule
-	BitbucketBearerToken  string
+	BitbucketTokens       BitbucketTokens // Bitbucket API tokens: BITBUCKET_<WORKSPACE>_<REPO>_TOKEN per repo, BITBUCKET_BEARER_TOKEN as fallback
 	ClientSet             *kubernetes.Clientset
 	ClusterName           string
 	Clusters              []ClusterConfig // Parsed from config.yaml clusters section

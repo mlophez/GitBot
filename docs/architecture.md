@@ -116,7 +116,12 @@ it calls an adapter to fetch/translate, runs pure domain logic (including
   (`internal/event/provider_bitbucket.go`) parses incoming webhooks, fetches
   changed files and commits-behind, writes status comments back on the PR, and
   lists open pull requests (all pages) for the preview plugin generator.
-  Authenticated with `BITBUCKET_BEARER_TOKEN`.
+  Each call is authenticated with the token of the target repository:
+  `BITBUCKET_<WORKSPACE>_<REPO>_TOKEN` when set (upper-cased, non-alphanumeric
+  characters as `_`, e.g. `BITBUCKET_FIRMAPRO_KUBEOPS_AGENT_TOKEN`), otherwise the
+  fallback `BITBUCKET_BEARER_TOKEN`. Resolved by `config.BitbucketTokens`
+  (`internal/config/bitbucket_tokens.go`), since Bitbucket repository access
+  tokens are scoped to a single repository.
 - **ArgoCD ApplicationSet plugin generator** — ArgoCD polls
   `POST /api/v1/getparams.execute` (`internal/preview/get_params_v1.go`) to get one
   parameter set per open, non-draft PR. Authenticated with its own token
@@ -149,7 +154,8 @@ The event queue is an in-memory FIFO (`MemoryQueue` in
   sourced from an `env.ini` / `env.local.ini` file) plus an optional YAML file
   pointed to by `CONFIG_FILE` (clusters and security rules).
 - Key environment variables: `HTTP_PORT` (default 8080),
-  `BITBUCKET_BEARER_TOKEN`, `CONFIG_FILE`, `CLUSTER_NAME` (fallback environment
+  `BITBUCKET_BEARER_TOKEN` (fallback Bitbucket token),
+  `BITBUCKET_<WORKSPACE>_<REPO>_TOKEN` (per-repository Bitbucket token), `CONFIG_FILE`, `CLUSTER_NAME` (fallback environment
   label when the `gitbot.io/env` annotation is absent), `API_TOKEN`,
   `WEBHOOK_TOKEN`, `BOT_KUBERNETES_USERNAME`, `ARGOCD_PLUGIN_TOKEN` (token shared
   with the ArgoCD plugin generator; when empty the endpoint answers 503).

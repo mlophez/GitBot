@@ -44,7 +44,8 @@ func main() {
 	appManager := buildAppManager(c, localManager)
 
 	/* Providers: Bitbucket, GitHub, GitLab, etc. */
-	bitbucket := event.NewBitbucketClient(c.BitbucketBearerToken, c.BitbucketBotUUID)
+	bitbucket := event.NewBitbucketClient(c.BitbucketTokens, c.BitbucketBotUUID)
+	slog.Info("Bitbucket repository tokens loaded", "vars", c.BitbucketTokens.EnvNames())
 
 	/* Queue */
 	eventQueue := event.NewMemoryQueue[event.QueueItem]()
